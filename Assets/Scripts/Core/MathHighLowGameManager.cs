@@ -13,7 +13,7 @@ namespace MathHighLow.Core
     public class MathHighLowGameManager : MonoBehaviour
     {
         [Header("라운드 설정")]
-        [SerializeField] private int cardsPerPlayer = 5;
+        [SerializeField] private int cardsPerPlayer = 4;
         [SerializeField] private float dealInterval = 0.2f;
         [SerializeField] private int[] targetValues = { 20, 1 };
 
@@ -109,15 +109,21 @@ namespace MathHighLow.Core
             uiController.HighlightTarget(selectedTarget);
             uiController.SetStatusMessage("카드를 드로우합니다...");
 
+            deckService.Shuffle();
+            var usedNumberValues = new HashSet<int>();
+
             for (var i = 0; i < cardsPerPlayer; i++)
             {
-                var aiCard = deckService.Draw();
+                var aiCard = DrawUniqueCard(usedNumberValues);
                 aiHand.Add(aiCard);
                 uiController.AddAiCard(aiCard);
 
                 yield return new WaitForSeconds(dealInterval);
+            }
 
-                var playerCard = deckService.Draw();
+            for (var i = 0; i < cardsPerPlayer; i++)
+            {
+                var playerCard = DrawUniqueCard(usedNumberValues);
                 playerHand.Add(playerCard);
                 uiController.AddPlayerCard(playerCard);
 
@@ -143,6 +149,7 @@ namespace MathHighLow.Core
             }
 
             view.Interactable = false;
+            uiController.MovePlayerCardToExpression(view);
             UpdatePlayerExpressionView();
         }
 
@@ -255,6 +262,29 @@ namespace MathHighLow.Core
             }
 
             return "AI 승리! 더 목표에 근접했습니다.";
+        }
+
+        private CardDefinition DrawUniqueCard(HashSet<int> usedNumberValues)
+        {
+            CardDefinition lastDrawn = null;
+
+            for (var attempt = 0; attempt < 256; attempt++)
+            {
+                var card = deckService.Draw();
+                lastDrawn = card;
+
+                if (card.Kind != CardKind.Number)
+                {
+                    return card;
+                }
+
+                if (usedNumberValues.Add(card.NumberValue))
+                {
+                    return card;
+                }
+            }
+
+            return lastDrawn ?? deckService.Draw();
         }
     }
 }

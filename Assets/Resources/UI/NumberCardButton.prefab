@@ -58,9 +58,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b061d5cea9264aefa5b1916f1a86164d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  label: {fileID: 0}
+  m_Name:
+  m_EditorClassIdentifier:
+  numberLabel: {fileID: 7818909468544117107}
+  operatorLabel: {fileID: 0}
+  legacyLabel: {fileID: 0}
+  backgroundImage: {fileID: 4896245093005678120}
+  numberSprite: {fileID: 0}
+  operatorSprite: {fileID: 0}
+  numberLabelOffset: {x: 0, y: 0}
+  operatorLabelOffset: {x: 0, y: 0}
 --- !u!114 &5005081287677859337
 MonoBehaviour:
   m_ObjectHideFlags: 0

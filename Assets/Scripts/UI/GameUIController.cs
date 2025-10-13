@@ -25,6 +25,7 @@ namespace MathHighLow.UI
         private RectTransform root;
         private Transform aiHandContainer;
         private Transform playerHandContainer;
+        private Transform playerExpressionContainer;
         private Transform targetButtonContainer;
         private Transform actionButtonContainer;
         private Text statusText;
@@ -78,8 +79,8 @@ namespace MathHighLow.UI
 
             CreateHeader(layoutGroup.transform);
             aiHandContainer = CreateCardSection(layoutGroup.transform, "AI 카드");
-            playerHandContainer = CreateCardSection(layoutGroup.transform, "플레이어 카드");
             CreateExpressionSection(layoutGroup.transform);
+            playerHandContainer = CreateCardSection(layoutGroup.transform, "플레이어 카드");
             targetButtonContainer = CreateButtonRow(layoutGroup.transform, "목표 선택");
             actionButtonContainer = CreateButtonRow(layoutGroup.transform, "조작");
             CreateActionButtons();
@@ -139,27 +140,14 @@ namespace MathHighLow.UI
 
         public void ResetPlayerCards()
         {
-            foreach (var view in playerCardViews)
-            {
-                if (view != null)
-                {
-                    Destroy(view.gameObject);
-                }
-            }
-
+            ClearContainerChildren(playerHandContainer);
+            ClearContainerChildren(playerExpressionContainer);
             playerCardViews.Clear();
         }
 
         private void ResetAiCards()
         {
-            foreach (var cardObject in aiCardObjects)
-            {
-                if (cardObject != null)
-                {
-                    Destroy(cardObject);
-                }
-            }
-
+            ClearContainerChildren(aiHandContainer);
             aiCardObjects.Clear();
         }
 
@@ -229,8 +217,36 @@ namespace MathHighLow.UI
 
         private void CreateExpressionSection(Transform parent)
         {
-            playerExpressionText = CreateText(parent, "플레이어 수식: -", 28, FontStyle.Normal, TextAnchor.MiddleLeft);
-            aiExpressionText = CreateText(parent, "AI 수식: -", 28, FontStyle.Normal, TextAnchor.MiddleLeft);
+            var section = new GameObject("Expression Section", typeof(RectTransform));
+            section.transform.SetParent(parent, false);
+
+            var layout = section.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            playerExpressionText = CreateText(section.transform, "플레이어 수식: -", 28, FontStyle.Normal, TextAnchor.MiddleLeft);
+
+            var cardsRow = new GameObject("Expression Cards", typeof(RectTransform));
+            cardsRow.transform.SetParent(section.transform, false);
+
+            var horizontal = cardsRow.AddComponent<HorizontalLayoutGroup>();
+            horizontal.spacing = 16f;
+            horizontal.childAlignment = TextAnchor.MiddleCenter;
+            horizontal.childControlWidth = false;
+            horizontal.childForceExpandWidth = false;
+            horizontal.childControlHeight = false;
+            horizontal.childForceExpandHeight = false;
+
+            var layoutElement = cardsRow.AddComponent<LayoutElement>();
+            layoutElement.preferredHeight = 120f;
+            layoutElement.flexibleWidth = 1f;
+
+            playerExpressionContainer = cardsRow.transform;
+
+            aiExpressionText = CreateText(section.transform, "AI 수식: -", 28, FontStyle.Normal, TextAnchor.MiddleLeft);
         }
 
         private Transform CreateButtonRow(Transform parent, string header)
@@ -348,6 +364,23 @@ namespace MathHighLow.UI
             ConfigureCardView(view, card, interactable);
 
             return view;
+        }
+
+        public void MovePlayerCardToExpression(CardButtonView view)
+        {
+            if (view == null || playerExpressionContainer == null)
+            {
+                return;
+            }
+
+            view.transform.SetParent(playerExpressionContainer, true);
+            view.transform.SetAsLastSibling();
+
+            if (view.transform is RectTransform rect)
+            {
+                rect.localScale = Vector3.one;
+                rect.anchoredPosition3D = Vector3.zero;
+            }
         }
 
         private CardButtonView CreateRuntimeCardButton(Transform parent)
@@ -477,6 +510,23 @@ namespace MathHighLow.UI
 
             targetButtons.Clear();
             targetLookup.Clear();
+        }
+
+        private void ClearContainerChildren(Transform container)
+        {
+            if (container == null)
+            {
+                return;
+            }
+
+            for (var i = container.childCount - 1; i >= 0; i--)
+            {
+                var child = container.GetChild(i);
+                if (child != null)
+                {
+                    Destroy(child.gameObject);
+                }
+            }
         }
 
         private void EnsureCanvasComponents()
