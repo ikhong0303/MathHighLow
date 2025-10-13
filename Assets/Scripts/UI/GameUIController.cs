@@ -54,7 +54,8 @@ namespace MathHighLow.UI
             }
 
             layoutBuilt = true;
-            defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            // 수정 후 예시 코드
+            Font myFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
             var canvasScaler = GetComponent<CanvasScaler>();
             if (canvasScaler != null)
