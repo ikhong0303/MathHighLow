@@ -16,6 +16,12 @@ namespace MathHighLow.UI
         public event Action OnSubmitRequested;
         public event Action OnResetRequested;
 
+        [Header("카드 프리팹 (선택 사항)")]
+        [SerializeField] private CardButtonView numberCardPrefab;
+        [SerializeField] private CardButtonView operatorCardPrefab;
+        [SerializeField] private string numberCardResourcePath = "UI/NumberCardButton";
+        [SerializeField] private string operatorCardResourcePath = "UI/OperatorCardButton";
+
         private RectTransform root;
         private Transform aiHandContainer;
         private Transform playerHandContainer;
@@ -32,6 +38,13 @@ namespace MathHighLow.UI
         private Button resetButton;
         private Font defaultFont;
         private bool layoutBuilt;
+        private static readonly Vector2 DefaultCardSize = new Vector2(120f, 80f);
+
+        private void Awake()
+        {
+            LoadPrefabIfNeeded(ref numberCardPrefab, numberCardResourcePath);
+            LoadPrefabIfNeeded(ref operatorCardPrefab, operatorCardResourcePath);
+        }
 
         public void BuildLayout()
         {
@@ -322,11 +335,33 @@ namespace MathHighLow.UI
 
         private CardButtonView CreateCardButton(Transform parent, CardDefinition card, bool interactable)
         {
+            var template = card.Kind == CardKind.Number ? numberCardPrefab : operatorCardPrefab;
+            CardButtonView view;
+
+            if (template != null)
+            {
+                view = Instantiate(template, parent);
+                view.gameObject.name = $"{card.GetDisplayText()} Card";
+                view.transform.localScale = Vector3.one;
+                EnsureLayoutElement(view);
+            }
+            else
+            {
+                view = CreateRuntimeCardButton(parent);
+            }
+
+            ConfigureCardView(view, card, interactable);
+
+            return view;
+        }
+
+        private CardButtonView CreateRuntimeCardButton(Transform parent)
+        {
             var buttonGo = new GameObject("CardButton", typeof(RectTransform), typeof(Image), typeof(Button));
             buttonGo.transform.SetParent(parent, false);
 
             var rect = buttonGo.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(120f, 80f);
+            rect.sizeDelta = DefaultCardSize;
 
             var image = buttonGo.GetComponent<Image>();
             image.color = Color.white;
@@ -338,13 +373,11 @@ namespace MathHighLow.UI
             colors.pressedColor = new Color(0.8f, 0.85f, 1f);
             colors.selectedColor = new Color(0.85f, 0.9f, 1f);
             button.colors = colors;
-            button.interactable = interactable;
 
             var textGo = new GameObject("Label", typeof(RectTransform));
             textGo.transform.SetParent(buttonGo.transform, false);
             var text = textGo.AddComponent<Text>();
             text.font = defaultFont;
-            text.text = card.GetDisplayText();
             text.fontSize = 34;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.black;
@@ -354,10 +387,76 @@ namespace MathHighLow.UI
             layoutElement.preferredHeight = rect.sizeDelta.y;
 
             var view = buttonGo.AddComponent<CardButtonView>();
+            view.Interactable = true;
+            return view;
+        }
+
+        private void ConfigureCardView(CardButtonView view, CardDefinition card, bool interactable)
+        {
             view.Initialize(card, interactable ? OnPlayerCardViewClicked : null);
             view.Interactable = interactable;
 
-            return view;
+            var button = view.GetComponent<Button>();
+            if (button != null)
+            {
+                button.interactable = interactable;
+            }
+
+            EnsureLayoutElement(view);
+        }
+
+        private void EnsureLayoutElement(CardButtonView view)
+        {
+            if (view == null)
+            {
+                return;
+            }
+
+            var layout = view.GetComponent<LayoutElement>();
+            if (layout == null)
+            {
+                layout = view.gameObject.AddComponent<LayoutElement>();
+            }
+
+            if (layout.preferredWidth <= 0f || layout.preferredHeight <= 0f)
+            {
+                if (view.transform is RectTransform rect)
+                {
+                    if (layout.preferredWidth <= 0f)
+                    {
+                        layout.preferredWidth = rect.sizeDelta.x;
+                    }
+
+                    if (layout.preferredHeight <= 0f)
+                    {
+                        layout.preferredHeight = rect.sizeDelta.y;
+                    }
+                }
+
+                if (layout.preferredWidth <= 0f)
+                {
+                    layout.preferredWidth = DefaultCardSize.x;
+                }
+
+                if (layout.preferredHeight <= 0f)
+                {
+                    layout.preferredHeight = DefaultCardSize.y;
+                }
+            }
+        }
+
+        private void LoadPrefabIfNeeded(ref CardButtonView prefabField, string resourcePath)
+        {
+            if (prefabField != null || string.IsNullOrEmpty(resourcePath))
+            {
+                return;
+            }
+
+            var loaded = Resources.Load<GameObject>(resourcePath);
+            if (loaded != null)
+            {
+                prefabField = loaded.GetComponent<CardButtonView>();
+            }
         }
 
         private void OnPlayerCardViewClicked(CardButtonView view)
