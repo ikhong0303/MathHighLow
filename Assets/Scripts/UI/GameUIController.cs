@@ -54,16 +54,9 @@ namespace MathHighLow.UI
             }
 
             layoutBuilt = true;
-            // 수정 후 예시 코드
-            Font myFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-            var canvasScaler = GetComponent<CanvasScaler>();
-            if (canvasScaler != null)
-            {
-                canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                canvasScaler.referenceResolution = new Vector2(1920, 1080);
-                canvasScaler.matchWidthOrHeight = 0.5f;
-            }
+            EnsureCanvasComponents();
+            EnsureDefaultFont();
 
             var rootGo = new GameObject("UILayout", typeof(RectTransform));
             rootGo.transform.SetParent(transform, false);
@@ -295,6 +288,7 @@ namespace MathHighLow.UI
             var layoutElement = go.AddComponent<LayoutElement>();
             layoutElement.preferredHeight = Mathf.Max(40f, fontSize * 1.2f);
             layoutElement.flexibleHeight = 0;
+            layoutElement.flexibleWidth = 1f;
 
             return text;
         }
@@ -483,6 +477,64 @@ namespace MathHighLow.UI
 
             targetButtons.Clear();
             targetLookup.Clear();
+        }
+
+        private void EnsureCanvasComponents()
+        {
+            var canvas = GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                canvas = gameObject.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            }
+            else if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            }
+
+            var canvasScaler = GetComponent<CanvasScaler>();
+            if (canvasScaler == null)
+            {
+                canvasScaler = gameObject.AddComponent<CanvasScaler>();
+            }
+
+            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            canvasScaler.referenceResolution = new Vector2(1920f, 1080f);
+            canvasScaler.matchWidthOrHeight = 0.5f;
+
+            if (GetComponent<GraphicRaycaster>() == null)
+            {
+                gameObject.AddComponent<GraphicRaycaster>();
+            }
+        }
+
+        private void EnsureDefaultFont()
+        {
+            if (defaultFont != null)
+            {
+                return;
+            }
+
+            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            if (defaultFont == null)
+            {
+                defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+
+            if (defaultFont == null)
+            {
+                var osFonts = Font.GetOSInstalledFontNames();
+                if (osFonts != null && osFonts.Length > 0)
+                {
+                    defaultFont = Font.CreateDynamicFontFromOSFont(osFonts[0], 32);
+                }
+            }
+
+            if (defaultFont == null)
+            {
+                Debug.LogError("UI에 사용할 기본 폰트를 찾을 수 없습니다. Canvas에 폰트를 직접 지정해주세요.", this);
+            }
         }
     }
 }

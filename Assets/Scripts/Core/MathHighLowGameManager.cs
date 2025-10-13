@@ -41,18 +41,21 @@ namespace MathHighLow.Core
 
         private void EnsureUi()
         {
-            if (uiController != null)
+            if (uiController == null)
             {
-                return;
+                uiController = FindObjectOfType<GameUIController>();
             }
 
-            var canvasGo = new GameObject("GameCanvas");
-            var canvas = canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasGo.AddComponent<UnityEngine.UI.CanvasScaler>();
-            canvasGo.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            if (uiController == null)
+            {
+                var canvasGo = new GameObject("GameCanvas");
+                var canvas = canvasGo.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvasGo.AddComponent<UnityEngine.UI.CanvasScaler>();
+                canvasGo.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
-            uiController = canvasGo.AddComponent<GameUIController>();
+                uiController = canvasGo.AddComponent<GameUIController>();
+            }
 
             if (FindObjectOfType<EventSystem>() == null)
             {
