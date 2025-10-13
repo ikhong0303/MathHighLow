@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using MathHighLow.Core;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,11 +13,24 @@ namespace MathHighLow.UI
     [RequireComponent(typeof(Button))]
     public class CardButtonView : MonoBehaviour
     {
-        [SerializeField] private Text label;
+        [Header("텍스트 설정")]
+        [SerializeField] private TMP_Text numberLabel;
+        [SerializeField] private TMP_Text operatorLabel;
+        [SerializeField] private Text legacyLabel;
+
+        [Header("비주얼 설정")]
+        [SerializeField] private Image backgroundImage;
+        [SerializeField] private Sprite numberSprite;
+        [SerializeField] private Sprite operatorSprite;
+        [SerializeField] private Vector2 numberLabelOffset = Vector2.zero;
+        [SerializeField] private Vector2 operatorLabelOffset = Vector2.zero;
 
         private Button button;
         private CardDefinition card;
         private Action<CardButtonView> onClicked;
+        private TMP_Text fallbackLabel;
+        private TMP_Text[] cachedTmpLabels = Array.Empty<TMP_Text>();
+        private Sprite initialBackgroundSprite;
 
         public CardDefinition Card => card;
 
@@ -34,9 +49,10 @@ namespace MathHighLow.UI
         private void Awake()
         {
             button = GetComponent<Button>();
-            if (label == null)
+            CacheLabelReferences();
+            if (backgroundImage != null)
             {
-                label = GetComponentInChildren<Text>();
+                initialBackgroundSprite = backgroundImage.sprite;
             }
         }
 
@@ -44,21 +60,196 @@ namespace MathHighLow.UI
         {
             card = definition;
             onClicked = clicked;
-            if (label != null)
-            {
-                label.text = card.GetDisplayText();
-            }
-
-            if (button != null)
-            {
-                button.onClick.RemoveListener(HandleClicked);
-                button.onClick.AddListener(HandleClicked);
-            }
+            CacheLabelReferences();
+            ApplyCardVisual();
+            ConfigureButton();
         }
 
         private void HandleClicked()
         {
             onClicked?.Invoke(this);
+        }
+
+        private void ConfigureButton()
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveListener(HandleClicked);
+
+            if (onClicked != null)
+            {
+                button.onClick.AddListener(HandleClicked);
+            }
+        }
+
+        private void ApplyCardVisual()
+        {
+            if (card == null)
+            {
+                return;
+            }
+
+            var displayText = card.GetDisplayText();
+
+            var activeLabel = ResolvePrimaryLabel();
+            var inactiveLabel = ResolveSecondaryLabel(activeLabel);
+
+            if (activeLabel != null)
+            {
+                activeLabel.gameObject.SetActive(true);
+                activeLabel.text = displayText;
+                PositionLabel(activeLabel.rectTransform, card.Kind == CardKind.Number);
+            }
+
+            if (inactiveLabel != null && inactiveLabel != activeLabel)
+            {
+                inactiveLabel.text = string.Empty;
+                inactiveLabel.gameObject.SetActive(false);
+            }
+
+            UpdateLegacyLabel(activeLabel, displayText);
+            UpdateBackground();
+        }
+
+        private void UpdateLegacyLabel(TMP_Text activeLabel, string displayText)
+        {
+            if (legacyLabel == null)
+            {
+                return;
+            }
+
+            if (activeLabel != null)
+            {
+                legacyLabel.gameObject.SetActive(false);
+                legacyLabel.text = string.Empty;
+                return;
+            }
+
+            legacyLabel.gameObject.SetActive(true);
+            legacyLabel.text = displayText;
+            if (legacyLabel.transform is RectTransform rect)
+            {
+                PositionLabel(rect, card.Kind == CardKind.Number);
+            }
+        }
+
+        private void UpdateBackground()
+        {
+            if (backgroundImage == null)
+            {
+                return;
+            }
+
+            if (card.Kind == CardKind.Number)
+            {
+                backgroundImage.sprite = numberSprite != null ? numberSprite : initialBackgroundSprite;
+            }
+            else
+            {
+                backgroundImage.sprite = operatorSprite != null ? operatorSprite : initialBackgroundSprite;
+            }
+        }
+
+        private TMP_Text ResolvePrimaryLabel()
+        {
+            if (card == null)
+            {
+                return null;
+            }
+
+            if (card.Kind == CardKind.Number)
+            {
+                return numberLabel != null ? numberLabel : fallbackLabel;
+            }
+
+            return operatorLabel != null ? operatorLabel : fallbackLabel;
+        }
+
+        private TMP_Text ResolveSecondaryLabel(TMP_Text activeLabel)
+        {
+            if (card == null)
+            {
+                return null;
+            }
+
+            if (card.Kind == CardKind.Number)
+            {
+                if (operatorLabel != null && operatorLabel != activeLabel)
+                {
+                    return operatorLabel;
+                }
+            }
+            else
+            {
+                if (numberLabel != null && numberLabel != activeLabel)
+                {
+                    return numberLabel;
+                }
+            }
+
+            return null;
+        }
+
+        private void PositionLabel(RectTransform rect, bool isNumber)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            var anchor = isNumber ? new Vector2(1f, 0f) : new Vector2(0f, 0f);
+            var offset = isNumber ? numberLabelOffset : operatorLabelOffset;
+
+            rect.anchorMin = anchor;
+            rect.anchorMax = anchor;
+            rect.pivot = anchor;
+            rect.anchoredPosition = offset;
+        }
+
+        private void CacheLabelReferences()
+        {
+            cachedTmpLabels = GetComponentsInChildren<TMP_Text>(true);
+
+            if (numberLabel == null)
+            {
+                numberLabel = cachedTmpLabels.FirstOrDefault(text => text != null && text.name.IndexOf("number", StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            if (operatorLabel == null)
+            {
+                operatorLabel = cachedTmpLabels.FirstOrDefault(text => text != null && (text.name.IndexOf("operator", StringComparison.OrdinalIgnoreCase) >= 0 || text.name.IndexOf("symbol", StringComparison.OrdinalIgnoreCase) >= 0));
+            }
+
+            if (fallbackLabel == null)
+            {
+                fallbackLabel = cachedTmpLabels.FirstOrDefault(text => text != null && text != numberLabel && text != operatorLabel);
+                if (fallbackLabel == null)
+                {
+                    fallbackLabel = cachedTmpLabels.FirstOrDefault();
+                }
+            }
+
+            if (legacyLabel == null)
+            {
+                legacyLabel = GetComponentsInChildren<Text>(true).FirstOrDefault();
+            }
+
+            if (backgroundImage == null)
+            {
+                backgroundImage = GetComponent<Image>();
+                if (backgroundImage == null)
+                {
+                    backgroundImage = GetComponentInChildren<Image>();
+                }
+            }
+
+            if (backgroundImage != null && initialBackgroundSprite == null)
+            {
+                initialBackgroundSprite = backgroundImage.sprite;
+            }
         }
     }
 }

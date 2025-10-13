@@ -16,7 +16,7 @@ namespace MathHighLow.Core
         private readonly List<CardDefinition> cards = new();
         private readonly Random random;
 
-        public DeckService(int minNumber = 0, int maxNumber = 9, int numberCopies = 2, int operatorCopies = 2, int? seed = null)
+        public DeckService(int minNumber = 1, int maxNumber = 8, int numberCopies = 2, int operatorCopies = 2, int? seed = null)
         {
             if (minNumber > maxNumber)
             {
