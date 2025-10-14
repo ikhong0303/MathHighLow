@@ -125,14 +125,14 @@ namespace MathHighLow.Core
                         numbersUsed++;
                         expectNumber = false;
 
-                        var value = (int)token.Number;
-                        if (!numberUsage.TryGetValue(value, out var count) || count <= 0)
+                        var tokenValue = (int)token.Number;
+                        if (!numberUsage.TryGetValue(tokenValue, out var count) || count <= 0)
                         {
                             invalidNumberUsage = true;
                         }
                         else
                         {
-                            numberUsage[value] = count - 1;
+                            numberUsage[tokenValue] = count - 1;
                         }
 
                         break;

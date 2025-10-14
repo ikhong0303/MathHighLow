@@ -4,6 +4,7 @@ using MathHighLow.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.TextCore.LowLevel;
 
 namespace MathHighLow.UI
 {
@@ -54,7 +55,8 @@ namespace MathHighLow.UI
         private GameObject disablePromptPanel;
         private TextMeshProUGUI disablePromptText;
         private readonly List<Button> disablePromptButtons = new();
-        private Font defaultFont;
+        private TMP_FontAsset defaultFont;
+        private TMP_FontAsset hangulFallbackFont;
         private bool layoutBuilt;
 
         private static readonly Vector2 DefaultCardSize = new(120f, 80f);
@@ -310,7 +312,35 @@ namespace MathHighLow.UI
             }
         }
 
-        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        public void SetDisableOperatorPrompt(string title, string message, string confirmLabel)
+        {
+            if (disablePromptText == null)
+            {
+                return;
+            }
+
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(title))
+            {
+                parts.Add(title);
+            }
+
+            if (!string.IsNullOrEmpty(message))
+            {
+                parts.Add(message);
+            }
+
+            if (!string.IsNullOrEmpty(confirmLabel))
+            {
+                parts.Add(confirmLabel);
+            }
+
+            disablePromptText.text = parts.Count > 0
+                ? string.Join("\n", parts)
+                : string.Empty;
+        }
+
+        public void ShowDisableOperatorPrompt()
         {
             if (disablePromptPanel == null)
             {
@@ -318,10 +348,23 @@ namespace MathHighLow.UI
             }
 
             disablePromptPanel.SetActive(true);
+        }
+
+        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        {
+            if (disablePromptPanel == null)
+            {
+                return;
+            }
+
+            ShowDisableOperatorPrompt();
             disablePromptButtons.ForEach(button => Destroy(button.gameObject));
             disablePromptButtons.Clear();
 
-            disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+            if (disablePromptText != null && string.IsNullOrEmpty(disablePromptText.text))
+            {
+                disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+            }
 
             foreach (var option in options)
             {
@@ -342,6 +385,10 @@ namespace MathHighLow.UI
             disablePromptPanel.SetActive(false);
             disablePromptButtons.ForEach(button => Destroy(button.gameObject));
             disablePromptButtons.Clear();
+            if (disablePromptText != null)
+            {
+                disablePromptText.text = string.Empty;
+            }
         }
 
         public void ShowRoundResult(string summary, string detail)
@@ -493,7 +540,10 @@ namespace MathHighLow.UI
                 var labelGo = new GameObject("Label", typeof(RectTransform));
                 labelGo.transform.SetParent(go.transform, false);
                 var label = labelGo.AddComponent<TextMeshProUGUI>();
-                label.font = defaultFont;
+                if (defaultFont != null)
+                {
+                    label.font = defaultFont;
+                }
                 label.fontSize = 36;
                 label.alignment = TextAlignmentOptions.Center;
                 label.color = Color.black;
@@ -586,7 +636,10 @@ namespace MathHighLow.UI
             var go = new GameObject("Text", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var text = go.AddComponent<TextMeshProUGUI>();
-            text.font = defaultFont;
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
             text.text = content;
             text.fontSize = fontSize;
             text.fontStyle = style;
@@ -621,7 +674,10 @@ namespace MathHighLow.UI
             var textGo = new GameObject("Label", typeof(RectTransform));
             textGo.transform.SetParent(go.transform, false);
             var text = textGo.AddComponent<TextMeshProUGUI>();
-            text.font = defaultFont;
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
             text.fontSize = fontSize;
             text.fontStyle = FontStyles.Bold;
             text.alignment = TextAlignmentOptions.Center;
@@ -711,15 +767,214 @@ namespace MathHighLow.UI
 
         private void EnsureDefaultFont()
         {
-            if (defaultFont != null)
+            if (defaultFont == null)
+            {
+                defaultFont = TMP_Settings.defaultFontAsset;
+            }
+
+            if (defaultFont == null)
+            {
+                var legacyFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (legacyFont == null)
+                {
+                    legacyFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                }
+
+                if (legacyFont != null)
+                {
+                    defaultFont = TMP_FontAsset.CreateFontAsset(
+                        legacyFont,
+                        90,
+                        9,
+                        GlyphRenderMode.SDFAA,
+                        1024,
+                        1024,
+                        AtlasPopulationMode.Dynamic,
+                        true);
+
+                    if (defaultFont != null)
+                    {
+                        defaultFont.name = $"{legacyFont.name} TMP Font";
+                        TMP_Settings.defaultFontAsset = defaultFont;
+                    }
+                }
+            }
+
+            EnsureHangulFallback(defaultFont);
+        }
+
+        private void EnsureHangulFallback(TMP_FontAsset baseFont)
+        {
+            const char sampleHangul = '전';
+
+            if (baseFont == null)
             {
                 return;
             }
 
-            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont == null)
+            if (baseFont.HasCharacter(sampleHangul))
             {
-                defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                return;
+            }
+
+            if (TryEnsureExistingFallback(baseFont, sampleHangul))
+            {
+                return;
+            }
+
+            if (hangulFallbackFont == null)
+            {
+                hangulFallbackFont = TryCreateHangulFallbackFont();
+            }
+
+            if (hangulFallbackFont != null)
+            {
+                AttachFallback(baseFont, hangulFallbackFont, sampleHangul);
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "한국어 글리프를 지원하는 폰트를 찾지 못했습니다. " +
+                    "운영체제에 한국어 폰트가 설치돼 있는지 확인하고, 필요하면 프로젝트에 Noto Sans KR 같은 폰트를 추가해 주세요.");
+            }
+        }
+
+        private bool TryEnsureExistingFallback(TMP_FontAsset baseFont, char sampleHangul)
+        {
+            if (baseFont.fallbackFontAssetTable != null)
+            {
+                foreach (var fallback in baseFont.fallbackFontAssetTable)
+                {
+                    if (fallback != null && fallback.HasCharacter(sampleHangul))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            var liberationFallback = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF - Fallback");
+            if (AttachFallback(baseFont, liberationFallback, sampleHangul))
+            {
+                return true;
+            }
+
+            var globalFallbacks = TMP_Settings.fallbackFontAssets;
+            if (globalFallbacks != null)
+            {
+                foreach (var fallback in globalFallbacks)
+                {
+                    if (AttachFallback(baseFont, fallback, sampleHangul))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private TMP_FontAsset TryCreateHangulFallbackFont()
+        {
+            var osFontCandidates = new[]
+            {
+                "Noto Sans CJK KR",
+                "Noto Sans KR",
+                "NanumGothic",
+                "Nanum Gothic",
+                "Malgun Gothic",
+                "MalgunGothic",
+                "Apple SD Gothic Neo",
+                "AppleGothic",
+                "Source Han Sans KR",
+                "Source Han Sans K",
+                "Droid Sans Fallback"
+            };
+
+            foreach (var fontName in osFontCandidates)
+            {
+                try
+                {
+                    var osFont = Font.CreateDynamicFontFromOSFont(fontName, 90);
+                    if (osFont == null)
+                    {
+                        continue;
+                    }
+
+                    var fallbackAsset = TMP_FontAsset.CreateFontAsset(
+                        osFont,
+                        90,
+                        9,
+                        GlyphRenderMode.SDFAA,
+                        1024,
+                        1024,
+                        AtlasPopulationMode.Dynamic,
+                        true);
+
+                    if (fallbackAsset == null)
+                    {
+                        continue;
+                    }
+
+                    fallbackAsset.name = $"{fontName} TMP Dynamic";
+
+                    if (fallbackAsset.HasCharacter('전'))
+                    {
+                        RegisterGlobalFallback(fallbackAsset);
+                        return fallbackAsset;
+                    }
+                }
+                catch (Exception)
+                {
+                    // OS 폰트를 찾지 못한 경우 무시하고 다음 후보를 시도합니다.
+                }
+            }
+
+            return null;
+        }
+
+        private bool AttachFallback(TMP_FontAsset baseFont, TMP_FontAsset fallback, char sampleHangul)
+        {
+            if (baseFont == null || fallback == null)
+            {
+                return false;
+            }
+
+            if (!fallback.HasCharacter(sampleHangul))
+            {
+                return false;
+            }
+
+            if (baseFont.fallbackFontAssetTable == null)
+            {
+                baseFont.fallbackFontAssetTable = new List<TMP_FontAsset>();
+            }
+
+            if (!baseFont.fallbackFontAssetTable.Contains(fallback))
+            {
+                baseFont.fallbackFontAssetTable.Add(fallback);
+            }
+
+            RegisterGlobalFallback(fallback);
+            return true;
+        }
+
+        private void RegisterGlobalFallback(TMP_FontAsset fallback)
+        {
+            if (fallback == null)
+            {
+                return;
+            }
+
+            var globalFallbacks = TMP_Settings.fallbackFontAssets;
+            if (globalFallbacks == null)
+            {
+                globalFallbacks = new List<TMP_FontAsset>();
+                TMP_Settings.fallbackFontAssets = globalFallbacks;
+            }
+
+            if (!globalFallbacks.Contains(fallback))
+            {
+                globalFallbacks.Add(fallback);
             }
         }
     }
