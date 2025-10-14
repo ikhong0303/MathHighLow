@@ -134,6 +134,8 @@ namespace MathHighLow.Core
             uiController.SetStatusMessage("카드를 선택해 수식을 만들어주세요.");
             uiController.UpdatePlayerExpression(string.Empty);
             uiController.UpdateAiExpression(string.Empty);
+
+            yield return new WaitUntil(() => !roundActive);
         }
 
         private void HandlePlayerCardClicked(CardDefinition card, CardButtonView view)
