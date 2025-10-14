@@ -1,45 +1,56 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using MathHighLow.UI;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 namespace MathHighLow.Core
 {
     /// <summary>
-    /// 라운드 진행을 담당하는 메인 게임 매니저.
+    /// 코덱스 지시서에 맞춰 라운드를 상태 머신으로 제어하는 메인 매니저.
     /// </summary>
     public class MathHighLowGameManager : MonoBehaviour
     {
-        [Header("라운드 설정")]
-        [SerializeField] private int cardsPerPlayer = 4;
+        private enum RoundPhase
+        {
+            Dealing,
+            Waiting,
+            Evaluating,
+            Results
+        }
+
+        [Header("라운드 구성")]
         [SerializeField] private float dealInterval = 0.2f;
-        [SerializeField] private int[] targetValues = { 20, 1 };
+        [SerializeField] private int initialSlots = 3;
+        [SerializeField] private float submissionUnlockTime = 30f;
+        [SerializeField] private float roundDuration = 180f;
+        [SerializeField] private int startingCredits = 20;
+        [SerializeField] private int minBet = 1;
+        [SerializeField] private int maxBet = 5;
+        [SerializeField] private int[] targetValues = { 1, 20 };
 
         [Header("참조")]
         [SerializeField] private GameUIController uiController;
 
-        private readonly List<CardDefinition> playerHand = new();
-        private readonly List<CardDefinition> aiHand = new();
-        private readonly List<CardDefinition> playerExpression = new();
-        private readonly SimpleAiPlayer aiPlayer = new();
-        private DeckService deckService;
+        private readonly List<PlayerCardState> playerCards = new();
+        private readonly List<ExpressionToken> playerTokens = new();
+        private readonly DeckService deckService = new();
+        private readonly RoundHandState handState = new();
+        private readonly AiSolver aiSolver = new();
+
+        private RoundPhase phase;
+        private float elapsed;
+        private bool submitted;
         private int selectedTarget;
-        private bool roundActive;
+        private int currentBet;
+        private int playerCredits;
+        private int aiCredits;
+        private int multiplyUsed;
+        private int sqrtUsed;
+        private bool expectNumber;
+        private RoundHandSnapshot handSnapshot;
 
         private void Awake()
-        {
-            deckService = new DeckService();
-            EnsureUi();
-        }
-
-        private void Start()
-        {
-            StartCoroutine(GameLoop());
-        }
-
-        private void EnsureUi()
         {
             if (uiController == null)
             {
@@ -48,245 +59,492 @@ namespace MathHighLow.Core
 
             if (uiController == null)
             {
-                var canvasGo = new GameObject("GameCanvas");
-                var canvas = canvasGo.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvasGo.AddComponent<UnityEngine.UI.CanvasScaler>();
-                canvasGo.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-
-                uiController = canvasGo.AddComponent<GameUIController>();
+                Debug.LogError("GameUIController를 찾을 수 없습니다.", this);
             }
-
-            if (FindObjectOfType<EventSystem>() == null)
-            {
-                var eventSystemGo = new GameObject("EventSystem");
-                eventSystemGo.AddComponent<EventSystem>();
-                eventSystemGo.AddComponent<StandaloneInputModule>();
-            }
-
         }
 
+        private void Start()
+        {
+            playerCredits = startingCredits;
+            aiCredits = startingCredits;
+
+            EnsureUi();
+            StartCoroutine(GameLoop());
+        }
 
         private void OnDestroy()
         {
-            if (uiController != null)
+            if (uiController == null)
             {
-                uiController.OnPlayerCardClicked -= HandlePlayerCardClicked;
-                uiController.OnTargetSelected -= HandleTargetSelected;
-                uiController.OnSubmitRequested -= HandleSubmitRequested;
-                uiController.OnResetRequested -= HandleResetRequested;
+                return;
             }
+
+            uiController.OnNumberCardClicked -= HandleNumberCardClicked;
+            uiController.OnOperatorSelected -= HandleOperatorSelected;
+            uiController.OnSqrtSelected -= HandleSqrtSelected;
+            uiController.OnSubmitRequested -= HandleSubmitRequested;
+            uiController.OnResetRequested -= HandleResetRequested;
+            uiController.OnTargetSelected -= HandleTargetSelected;
+            uiController.OnBetIncreaseRequested -= HandleBetIncreaseRequested;
+            uiController.OnBetDecreaseRequested -= HandleBetDecreaseRequested;
         }
-        private IEnumerator GameLoop()
+
+        private void EnsureUi()
         {
+            if (uiController == null)
+            {
+                return;
+            }
+
             uiController.BuildLayout();
-            uiController.SetTargetOptions(targetValues);
-            uiController.OnPlayerCardClicked += HandlePlayerCardClicked;
-            uiController.OnTargetSelected += HandleTargetSelected;
+            uiController.OnNumberCardClicked += HandleNumberCardClicked;
+            uiController.OnOperatorSelected += HandleOperatorSelected;
+            uiController.OnSqrtSelected += HandleSqrtSelected;
             uiController.OnSubmitRequested += HandleSubmitRequested;
             uiController.OnResetRequested += HandleResetRequested;
+            uiController.OnTargetSelected += HandleTargetSelected;
+            uiController.OnBetIncreaseRequested += HandleBetIncreaseRequested;
+            uiController.OnBetDecreaseRequested += HandleBetDecreaseRequested;
 
+            uiController.SetTargetOptions(targetValues);
             if (targetValues != null && targetValues.Length > 0)
             {
                 selectedTarget = targetValues[0];
                 uiController.HighlightTarget(selectedTarget);
             }
 
+            currentBet = minBet;
+            uiController.UpdateBetDisplay(currentBet);
+            uiController.UpdateCredits(playerCredits, aiCredits);
+            uiController.SetStatusMessage("게임을 준비하는 중...");
+        }
+
+        private IEnumerator GameLoop()
+        {
             while (true)
             {
-                yield return StartCoroutine(PlayRound());
-                yield return new WaitForSeconds(1f);
+                yield return PlayRound();
             }
         }
 
         private IEnumerator PlayRound()
         {
-            roundActive = false;
-            playerExpression.Clear();
-            playerHand.Clear();
-            aiHand.Clear();
+            phase = RoundPhase.Dealing;
+            submitted = false;
+            multiplyUsed = 0;
+            sqrtUsed = 0;
+            expectNumber = true;
+            elapsed = 0f;
+            playerTokens.Clear();
+            playerCards.Clear();
+            handState.Reset();
+            deckService.BuildSlotDeck();
+
             uiController.PrepareForRound();
-            uiController.HighlightTarget(selectedTarget);
-            uiController.SetStatusMessage("카드를 드로우합니다...");
+            uiController.UpdateCredits(playerCredits, aiCredits);
+            uiController.UpdateBetDisplay(currentBet);
+            uiController.SetStatusMessage("카드를 분배합니다...");
+            uiController.SetSubmitInteractable(false, "30초 이전");
+            uiController.UpdateTimer(0f, roundDuration, submissionUnlockTime);
+            uiController.UpdateSpecialBadges(0, 0);
 
-            deckService.Shuffle();
-            var usedNumberValues = new HashSet<int>();
-
-            for (var i = 0; i < cardsPerPlayer; i++)
+            for (var i = 0; i < initialSlots; i++)
             {
-                var aiCard = DrawUniqueCard(usedNumberValues);
-                aiHand.Add(aiCard);
-                uiController.AddAiCard(aiCard);
-
+                var slotCard = deckService.DrawSlotCard();
+                yield return HandleDealtCard(slotCard);
                 yield return new WaitForSeconds(dealInterval);
             }
 
-            for (var i = 0; i < cardsPerPlayer; i++)
-            {
-                var playerCard = DrawUniqueCard(usedNumberValues);
-                playerHand.Add(playerCard);
-                uiController.AddPlayerCard(playerCard);
+            handSnapshot = handState.CreateSnapshot();
+            uiController.UpdateSpecialBadges(handState.MultiplyCount - multiplyUsed, handState.SquareRootCount - sqrtUsed);
+            uiController.SetStatusMessage("수식을 만들어 제출하세요.");
 
-                yield return new WaitForSeconds(dealInterval);
+            phase = RoundPhase.Waiting;
+            elapsed = 0f;
+            expectNumber = true;
+            while (!submitted)
+            {
+                elapsed += Time.deltaTime;
+                var windowOpen = elapsed >= submissionUnlockTime;
+                var timeRemaining = Mathf.Max(0f, roundDuration - elapsed);
+
+                uiController.UpdateTimer(elapsed, roundDuration, submissionUnlockTime);
+
+                EvaluateSubmissionEligibility(windowOpen);
+
+                if (elapsed >= roundDuration)
+                {
+                    HandleSubmit();
+                }
+
+                if (submitted)
+                {
+                    break;
+                }
+
+                yield return null;
             }
 
-            roundActive = true;
-            uiController.SetStatusMessage("카드를 선택해 수식을 만들어주세요.");
-            uiController.UpdatePlayerExpression(string.Empty);
-            uiController.UpdateAiExpression(string.Empty);
+            phase = RoundPhase.Evaluating;
 
-            yield return new WaitUntil(() => !roundActive);
+            var playerResult = EvaluatePlayerExpression(out var playerExpressionText, out var validationError);
+            var aiTokens = aiSolver.FindBestExpression(handSnapshot, selectedTarget);
+            var aiValidation = ExpressionValidator.Validate(handSnapshot, aiTokens);
+
+            var aiExpressionText = aiValidation.IsValid
+                ? $"{aiValidation.ExpressionText} = {aiValidation.Result:0.##}"
+                : "유효한 수식을 찾지 못했습니다.";
+
+            uiController.UpdatePlayerExpression(string.IsNullOrEmpty(playerExpressionText)
+                ? (validationError ?? "수식이 유효하지 않습니다.")
+                : playerExpressionText);
+            uiController.UpdateAiExpression(aiExpressionText);
+
+            var playerValid = double.IsFinite(playerResult);
+            var aiValid = aiValidation.IsValid;
+            var playerDistance = playerValid ? Math.Abs(playerResult - selectedTarget) : double.PositiveInfinity;
+            var aiDistance = aiValid ? Math.Abs(aiValidation.Result - selectedTarget) : double.PositiveInfinity;
+
+            var outcome = DetermineOutcome(playerDistance, aiDistance);
+            uiController.ShowRoundResult(outcome.summary, outcome.detail);
+
+            playerCredits = outcome.playerCredits;
+            aiCredits = outcome.aiCredits;
+            uiController.UpdateCredits(playerCredits, aiCredits);
+
+            phase = RoundPhase.Results;
+            yield return new WaitForSeconds(3f);
         }
 
-        private void HandlePlayerCardClicked(CardDefinition card, CardButtonView view)
+        private void EvaluateSubmissionEligibility(bool windowOpen)
         {
-            if (!roundActive)
+            var snapshot = handSnapshot;
+            var validation = ExpressionValidator.Validate(snapshot, playerTokens);
+
+            if (!windowOpen)
+            {
+                uiController.SetSubmitInteractable(false, "30초 이전");
+                return;
+            }
+
+            if (!validation.IsValid)
+            {
+                uiController.SetSubmitInteractable(false, validation.Error);
+                return;
+            }
+
+            if (selectedTarget == 0)
+            {
+                uiController.SetSubmitInteractable(false, "목표 미선택");
+                return;
+            }
+
+            if (currentBet < minBet || currentBet > maxBet)
+            {
+                uiController.SetSubmitInteractable(false, "베팅 미설정");
+                return;
+            }
+
+            uiController.SetSubmitInteractable(true, string.Empty);
+        }
+
+        private double EvaluatePlayerExpression(out string formattedExpression, out string error)
+        {
+            formattedExpression = string.Empty;
+            error = string.Empty;
+
+            var validation = ExpressionValidator.Validate(handSnapshot, playerTokens);
+            if (!validation.IsValid)
+            {
+                error = validation.Error;
+                return double.PositiveInfinity;
+            }
+
+            formattedExpression = $"{validation.ExpressionText} = {validation.Result:0.##}";
+            return validation.Result;
+        }
+
+        private (string summary, string detail, int playerCredits, int aiCredits) DetermineOutcome(double playerDistance, double aiDistance)
+        {
+            var betInfo = $"목표 ={selectedTarget}, 베팅 ${currentBet}";
+
+            if (double.IsInfinity(playerDistance) && double.IsInfinity(aiDistance))
+            {
+                var balanceInfo = $"새 잔액 | 플레이어 ${playerCredits}, AI ${aiCredits}";
+                var detailText = $"{betInfo}\n양측 모두 유효한 수식을 만들지 못했습니다.\n{balanceInfo}";
+                return ("라운드 무효", detailText, playerCredits, aiCredits);
+            }
+
+            var distanceInfo = $"차이 | 플레이어 {playerDistance:0.##}, AI {aiDistance:0.##}";
+
+            if (Mathf.Approximately((float)playerDistance, (float)aiDistance))
+            {
+                var balanceInfo = $"새 잔액 | 플레이어 ${playerCredits}, AI ${aiCredits}";
+                var detailText = $"{betInfo}\n{distanceInfo}\n{balanceInfo}";
+                return ("무승부", detailText, playerCredits, aiCredits);
+            }
+
+            if (playerDistance < aiDistance)
+            {
+                var newPlayerCredits = playerCredits + currentBet;
+                var newAiCredits = aiCredits - currentBet;
+                var balanceInfo = $"새 잔액 | 플레이어 ${newPlayerCredits}, AI ${newAiCredits}";
+                var detailText = $"{betInfo}\n{distanceInfo}\n{balanceInfo}";
+                return ("플레이어 승리", detailText, newPlayerCredits, newAiCredits);
+            }
+
+            var updatedPlayerCredits = playerCredits - currentBet;
+            var updatedAiCredits = aiCredits + currentBet;
+            var updatedBalanceInfo = $"새 잔액 | 플레이어 ${updatedPlayerCredits}, AI ${updatedAiCredits}";
+            var detail = $"{betInfo}\n{distanceInfo}\n{updatedBalanceInfo}";
+            return ("AI 승리", detail, updatedPlayerCredits, updatedAiCredits);
+        }
+
+        private IEnumerator HandleDealtCard(CardDefinition card)
+        {
+            if (card.Kind == CardKind.Number)
+            {
+                AddNumberCard(card.NumberValue);
+                yield break;
+            }
+
+            if (card.Kind == CardKind.Special)
+            {
+                handState.AddSpecialCard(card.SpecialType);
+                uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+
+                switch (card.SpecialType)
+                {
+                    case SpecialCardType.SquareRoot:
+                        var sqrtNumber = deckService.DrawNumberCard();
+                        AddNumberCard(sqrtNumber.NumberValue);
+                        break;
+                    case SpecialCardType.Multiply:
+                        var multiplyNumber = deckService.DrawNumberCard();
+                        AddNumberCard(multiplyNumber.NumberValue);
+                        yield return PromptDisableOperator();
+                        break;
+                }
+            }
+        }
+
+        private IEnumerator PromptDisableOperator()
+        {
+            var available = new List<OperatorType>
+            {
+                OperatorType.Add,
+                OperatorType.Subtract,
+                OperatorType.Divide
+            };
+
+            available.RemoveAll(op => handState.DisabledBaseOperators.Contains(op));
+
+            if (available.Count == 0)
+            {
+                yield break;
+            }
+
+            var selectionComplete = false;
+            uiController.ShowDisableOperatorPrompt(available, selected =>
+            {
+                handState.DisableBaseOperator(selected);
+                uiController.SetOperatorEnabled(selected, false);
+                selectionComplete = true;
+            });
+
+            yield return new WaitUntil(() => selectionComplete);
+            uiController.HideDisableOperatorPrompt();
+        }
+
+        private void AddNumberCard(int value)
+        {
+            handState.AddNumberCard(value);
+            var card = new CardDefinition(CardKind.Number, value, OperatorType.Add);
+            var view = uiController.AddPlayerNumberCard(card);
+            playerCards.Add(new PlayerCardState(card, view));
+            uiController.AddAiCard(card);
+        }
+
+        private void HandleNumberCardClicked(CardDefinition card, CardButtonView view)
+        {
+            if (phase != RoundPhase.Waiting || !expectNumber)
             {
                 return;
             }
 
-            if (!TryAddCardToExpression(card))
+            var state = playerCards.Find(entry => entry.View == view);
+            if (state == null || state.Used)
             {
                 return;
             }
 
+            state.Used = true;
             view.Interactable = false;
-            uiController.MovePlayerCardToExpression(view);
-            UpdatePlayerExpressionView();
+            playerTokens.Add(ExpressionToken.NumberToken(card.NumberValue));
+            expectNumber = false;
+            UpdateExpressionPreview();
         }
 
-        private void HandleTargetSelected(int targetValue)
+        private void HandleOperatorSelected(OperatorType operatorType)
         {
-            selectedTarget = targetValue;
-            uiController.HighlightTarget(selectedTarget);
+            if (phase != RoundPhase.Waiting || expectNumber)
+            {
+                return;
+            }
+
+            if (operatorType == OperatorType.Multiply)
+            {
+                if (multiplyUsed >= handState.MultiplyCount)
+                {
+                    return;
+                }
+
+                multiplyUsed++;
+            }
+            else if (handState.DisabledBaseOperators.Contains(operatorType))
+            {
+                return;
+            }
+
+            playerTokens.Add(ExpressionToken.BinaryOperatorToken(operatorType));
+            expectNumber = true;
+            uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+            UpdateExpressionPreview();
+        }
+
+        private void HandleSqrtSelected()
+        {
+            if (phase != RoundPhase.Waiting || !expectNumber)
+            {
+                return;
+            }
+
+            if (sqrtUsed >= handState.SquareRootCount)
+            {
+                return;
+            }
+
+            sqrtUsed++;
+            playerTokens.Add(ExpressionToken.UnaryOperatorToken(SpecialCardType.SquareRoot));
+            uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+            UpdateExpressionPreview();
         }
 
         private void HandleResetRequested()
         {
-            if (!roundActive)
+            if (phase != RoundPhase.Waiting)
             {
                 return;
             }
 
-            playerExpression.Clear();
-            uiController.ResetPlayerCards();
-            foreach (var card in playerHand)
+            ResetExpression();
+        }
+
+        private void ResetExpression()
+        {
+            foreach (var state in playerCards)
             {
-                uiController.AddPlayerCard(card);
+                state.Used = false;
+                if (state.View != null)
+                {
+                    state.View.Interactable = true;
+                }
             }
 
-            uiController.UpdatePlayerExpression(string.Empty);
-            uiController.SetStatusMessage("수식을 다시 만들어주세요.");
+            playerTokens.Clear();
+            multiplyUsed = 0;
+            sqrtUsed = 0;
+            expectNumber = true;
+            uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+            UpdateExpressionPreview();
+        }
+
+        private void HandleTargetSelected(int target)
+        {
+            selectedTarget = target;
+            uiController.HighlightTarget(selectedTarget);
+        }
+
+        private void HandleBetIncreaseRequested()
+        {
+            currentBet = Mathf.Clamp(currentBet + 1, minBet, maxBet);
+            uiController.UpdateBetDisplay(currentBet);
+        }
+
+        private void HandleBetDecreaseRequested()
+        {
+            currentBet = Mathf.Clamp(currentBet - 1, minBet, maxBet);
+            uiController.UpdateBetDisplay(currentBet);
         }
 
         private void HandleSubmitRequested()
         {
-            if (!roundActive)
+            if (phase != RoundPhase.Waiting)
             {
                 return;
             }
 
-            if (!MathExpressionEvaluator.TryEvaluate(playerExpression, out var playerResult, out var playerExpressionText, out var error))
+            if (elapsed < submissionUnlockTime)
             {
-                uiController.SetStatusMessage(error);
                 return;
             }
 
-            var aiExpressionCards = aiPlayer.BuildExpression(aiHand, selectedTarget);
-            MathExpressionEvaluator.TryEvaluate(aiExpressionCards, out var aiResult, out var aiExpressionText, out _);
-
-            uiController.UpdatePlayerExpression(playerExpressionText + " = " + playerResult.ToString("0.##"));
-            uiController.UpdateAiExpression(aiExpressionText.Length > 0 ? aiExpressionText + " = " + aiResult.ToString("0.##") : "AI가 유효한 수식을 만들지 못했습니다.");
-
-            var outcome = DetermineOutcome(playerResult, aiResult, aiExpressionCards.Count > 0);
-            uiController.SetStatusMessage(outcome);
-            roundActive = false;
+            HandleSubmit();
         }
 
-        private bool TryAddCardToExpression(CardDefinition card)
+        private void HandleSubmit()
         {
-            if (card == null)
-            {
-                return false;
-            }
-
-            if (playerExpression.Count == 0)
-            {
-                if (card.Kind != CardKind.Number)
-                {
-                    uiController.SetStatusMessage("첫 카드는 숫자여야 합니다.");
-                    return false;
-                }
-            }
-            else
-            {
-                var lastCard = playerExpression[^1];
-                if (lastCard.Kind == card.Kind)
-                {
-                    uiController.SetStatusMessage("숫자와 연산자를 번갈아 선택해야 합니다.");
-                    return false;
-                }
-            }
-
-            if (card.Kind == CardKind.Operator && !playerExpression.Any())
-            {
-                return false;
-            }
-
-            playerExpression.Add(card);
-            return true;
+            submitted = true;
+            uiController.SetSubmitInteractable(false, string.Empty);
         }
 
-        private void UpdatePlayerExpressionView()
+        private void UpdateExpressionPreview()
         {
-            if (!MathExpressionEvaluator.TryBuildExpressionString(playerExpression, out var expression, out _))
-            {
-                uiController.UpdatePlayerExpression(string.Empty);
-                return;
-            }
-
-            uiController.UpdatePlayerExpression(expression);
+            var preview = BuildExpressionPreview();
+            uiController.UpdatePlayerExpression(preview);
+            EvaluateSubmissionEligibility(elapsed >= submissionUnlockTime);
         }
 
-        private string DetermineOutcome(double playerResult, double aiResult, bool aiHasExpression)
+        private string BuildExpressionPreview()
         {
-            var playerDistance = Mathf.Abs((float)(playerResult - selectedTarget));
-            var aiDistance = aiHasExpression ? Mathf.Abs((float)(aiResult - selectedTarget)) : float.PositiveInfinity;
-
-            if (playerDistance < aiDistance)
+            if (playerTokens.Count == 0)
             {
-                return $"플레이어 승리! 목표값 {selectedTarget}에 더 가깝습니다.";
+                return "수식을 구성 중...";
             }
 
-            if (Mathf.Approximately(playerDistance, aiDistance))
+            var parts = new List<string>();
+            foreach (var token in playerTokens)
             {
-                return "무승부입니다.";
-            }
-
-            return "AI 승리! 더 목표에 근접했습니다.";
-        }
-
-        private CardDefinition DrawUniqueCard(HashSet<int> usedNumberValues)
-        {
-            CardDefinition lastDrawn = null;
-
-            for (var attempt = 0; attempt < 256; attempt++)
-            {
-                var card = deckService.Draw();
-                lastDrawn = card;
-
-                if (card.Kind != CardKind.Number)
+                switch (token.Type)
                 {
-                    return card;
-                }
-
-                if (usedNumberValues.Add(card.NumberValue))
-                {
-                    return card;
+                    case ExpressionTokenType.Number:
+                        parts.Add(token.Number.ToString("0"));
+                        break;
+                    case ExpressionTokenType.BinaryOperator:
+                        parts.Add(token.BinaryOperator.ToSymbol());
+                        break;
+                    case ExpressionTokenType.UnaryOperator:
+                        parts.Add("√");
+                        break;
                 }
             }
 
-            return lastDrawn ?? deckService.Draw();
+            return string.Join(" ", parts);
+        }
+
+        private sealed class PlayerCardState
+        {
+            public PlayerCardState(CardDefinition card, CardButtonView view)
+            {
+                Card = card;
+                View = view;
+            }
+
+            public CardDefinition Card { get; }
+
+            public CardButtonView View { get; }
+
+            public bool Used { get; set; }
         }
     }
 }
