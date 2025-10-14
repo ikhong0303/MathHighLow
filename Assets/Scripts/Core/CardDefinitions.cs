@@ -9,7 +9,8 @@ namespace MathHighLow.Core
     public enum CardKind
     {
         Number,
-        Operator
+        Operator,
+        Special
     }
 
     /// <summary>
@@ -24,6 +25,15 @@ namespace MathHighLow.Core
     }
 
     /// <summary>
+    /// 특수 카드 유형을 정의합니다.
+    /// </summary>
+    public enum SpecialCardType
+    {
+        Multiply,
+        SquareRoot
+    }
+
+    /// <summary>
     /// 한 장의 카드 정보를 나타냅니다.
     /// </summary>
     [Serializable]
@@ -32,12 +42,19 @@ namespace MathHighLow.Core
         [SerializeField] private CardKind kind;
         [SerializeField] private int numberValue;
         [SerializeField] private OperatorType operatorValue;
+        [SerializeField] private SpecialCardType specialType;
 
         public CardDefinition(CardKind kind, int numberValue, OperatorType operatorValue)
         {
             this.kind = kind;
             this.numberValue = numberValue;
             this.operatorValue = operatorValue;
+        }
+
+        public CardDefinition(CardKind kind, SpecialCardType specialType)
+        {
+            this.kind = kind;
+            this.specialType = specialType;
         }
 
         public CardKind Kind => kind;
@@ -54,9 +71,23 @@ namespace MathHighLow.Core
             set => operatorValue = value;
         }
 
+        public SpecialCardType SpecialType
+        {
+            get => specialType;
+            set => specialType = value;
+        }
+
+        public bool IsSpecial => kind == CardKind.Special;
+
+        public bool IsUnary => IsSpecial && specialType == SpecialCardType.SquareRoot;
+
         public CardDefinition Clone()
         {
-            return new CardDefinition(kind, numberValue, operatorValue);
+            var clone = new CardDefinition(kind, numberValue, operatorValue)
+            {
+                SpecialType = specialType
+            };
+            return clone;
         }
 
         public string GetDisplayText()
@@ -65,6 +96,12 @@ namespace MathHighLow.Core
             {
                 CardKind.Number => numberValue.ToString(),
                 CardKind.Operator => operatorValue.ToSymbol(),
+                CardKind.Special => specialType switch
+                {
+                    SpecialCardType.Multiply => "×",
+                    SpecialCardType.SquareRoot => "√",
+                    _ => "?"
+                },
                 _ => "?"
             };
         }
