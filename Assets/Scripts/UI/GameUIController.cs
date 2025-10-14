@@ -310,7 +310,35 @@ namespace MathHighLow.UI
             }
         }
 
-        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        public void SetDisableOperatorPrompt(string title, string message, string confirmLabel)
+        {
+            if (disablePromptText == null)
+            {
+                return;
+            }
+
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(title))
+            {
+                parts.Add(title);
+            }
+
+            if (!string.IsNullOrEmpty(message))
+            {
+                parts.Add(message);
+            }
+
+            if (!string.IsNullOrEmpty(confirmLabel))
+            {
+                parts.Add(confirmLabel);
+            }
+
+            disablePromptText.text = parts.Count > 0
+                ? string.Join("\n", parts)
+                : string.Empty;
+        }
+
+        public void ShowDisableOperatorPrompt()
         {
             if (disablePromptPanel == null)
             {
@@ -318,10 +346,23 @@ namespace MathHighLow.UI
             }
 
             disablePromptPanel.SetActive(true);
+        }
+
+        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        {
+            if (disablePromptPanel == null)
+            {
+                return;
+            }
+
+            ShowDisableOperatorPrompt();
             disablePromptButtons.ForEach(button => Destroy(button.gameObject));
             disablePromptButtons.Clear();
 
-            disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+            if (disablePromptText != null && string.IsNullOrEmpty(disablePromptText.text))
+            {
+                disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+            }
 
             foreach (var option in options)
             {
@@ -342,6 +383,10 @@ namespace MathHighLow.UI
             disablePromptPanel.SetActive(false);
             disablePromptButtons.ForEach(button => Destroy(button.gameObject));
             disablePromptButtons.Clear();
+            if (disablePromptText != null)
+            {
+                disablePromptText.text = string.Empty;
+            }
         }
 
         public void ShowRoundResult(string summary, string detail)
