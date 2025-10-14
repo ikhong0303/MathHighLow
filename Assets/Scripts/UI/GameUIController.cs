@@ -784,20 +784,10 @@ namespace MathHighLow.UI
 
             if (legacyFont != null)
             {
-                defaultFont = TMP_FontAsset.CreateFontAsset(
-                    legacyFont,
-                    90,
-                    9,
-                    GlyphRenderMode.SDFAA,
-                    1024,
-                    1024,
-                    AtlasPopulationMode.Dynamic,
-                    true);
-
+                defaultFont = TMP_FontAsset.CreateFontAsset(legacyFont);
                 if (defaultFont != null)
                 {
                     defaultFont.name = $"{legacyFont.name} TMP Font";
-                    TMP_Settings.defaultFontAsset = defaultFont;
                 }
             }
         }
