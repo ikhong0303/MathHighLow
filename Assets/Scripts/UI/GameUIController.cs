@@ -54,14 +54,13 @@ namespace MathHighLow.UI
         private GameObject disablePromptPanel;
         private TextMeshProUGUI disablePromptText;
         private readonly List<Button> disablePromptButtons = new();
-        private Font defaultFont;
         private bool layoutBuilt;
 
         private static readonly Vector2 DefaultCardSize = new(120f, 80f);
 
         private void Awake()
         {
-            EnsureDefaultFont();
+            TMPFontSupportUtility.EnsureHangulSupport();
         }
 
         public void BuildLayout()
@@ -310,7 +309,35 @@ namespace MathHighLow.UI
             }
         }
 
-        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        public void SetDisableOperatorPrompt(string title, string message, string confirmLabel)
+        {
+            if (disablePromptText == null)
+            {
+                return;
+            }
+
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(title))
+            {
+                parts.Add(title);
+            }
+
+            if (!string.IsNullOrEmpty(message))
+            {
+                parts.Add(message);
+            }
+
+            if (!string.IsNullOrEmpty(confirmLabel))
+            {
+                parts.Add(confirmLabel);
+            }
+
+            disablePromptText.text = parts.Count > 0
+                ? string.Join("\n", parts)
+                : string.Empty;
+        }
+
+        public void ShowDisableOperatorPrompt()
         {
             if (disablePromptPanel == null)
             {
@@ -318,10 +345,23 @@ namespace MathHighLow.UI
             }
 
             disablePromptPanel.SetActive(true);
+        }
+
+        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        {
+            if (disablePromptPanel == null)
+            {
+                return;
+            }
+
+            ShowDisableOperatorPrompt();
             disablePromptButtons.ForEach(button => Destroy(button.gameObject));
             disablePromptButtons.Clear();
 
-            disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+            if (disablePromptText != null && string.IsNullOrEmpty(disablePromptText.text))
+            {
+                disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+            }
 
             foreach (var option in options)
             {
@@ -342,6 +382,10 @@ namespace MathHighLow.UI
             disablePromptPanel.SetActive(false);
             disablePromptButtons.ForEach(button => Destroy(button.gameObject));
             disablePromptButtons.Clear();
+            if (disablePromptText != null)
+            {
+                disablePromptText.text = string.Empty;
+            }
         }
 
         public void ShowRoundResult(string summary, string detail)
@@ -493,7 +537,10 @@ namespace MathHighLow.UI
                 var labelGo = new GameObject("Label", typeof(RectTransform));
                 labelGo.transform.SetParent(go.transform, false);
                 var label = labelGo.AddComponent<TextMeshProUGUI>();
-                label.font = defaultFont;
+                if (defaultFont != null)
+                {
+                    label.font = defaultFont;
+                }
                 label.fontSize = 36;
                 label.alignment = TextAlignmentOptions.Center;
                 label.color = Color.black;
@@ -586,7 +633,10 @@ namespace MathHighLow.UI
             var go = new GameObject("Text", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var text = go.AddComponent<TextMeshProUGUI>();
-            text.font = defaultFont;
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
             text.text = content;
             text.fontSize = fontSize;
             text.fontStyle = style;
@@ -621,7 +671,10 @@ namespace MathHighLow.UI
             var textGo = new GameObject("Label", typeof(RectTransform));
             textGo.transform.SetParent(go.transform, false);
             var text = textGo.AddComponent<TextMeshProUGUI>();
-            text.font = defaultFont;
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
             text.fontSize = fontSize;
             text.fontStyle = FontStyles.Bold;
             text.alignment = TextAlignmentOptions.Center;
@@ -709,18 +762,5 @@ namespace MathHighLow.UI
             }
         }
 
-        private void EnsureDefaultFont()
-        {
-            if (defaultFont != null)
-            {
-                return;
-            }
-
-            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont == null)
-            {
-                defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            }
-        }
     }
 }
