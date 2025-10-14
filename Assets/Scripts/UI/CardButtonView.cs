@@ -213,23 +213,24 @@ namespace MathHighLow.UI
         {
             cachedTmpLabels = GetComponentsInChildren<TMP_Text>(true);
 
-            if (numberLabel == null)
-            {
-                numberLabel = cachedTmpLabels.FirstOrDefault(text => text != null && text.name.IndexOf("number", StringComparison.OrdinalIgnoreCase) >= 0);
-            }
+            var numberCandidate = FindLabelByKeyword("number") ?? numberLabel;
+            var operatorCandidate = FindLabelByKeyword("operator") ?? FindLabelByKeyword("symbol") ?? operatorLabel;
 
-            if (operatorLabel == null)
+            numberLabel = EnsureUiCompatibleLabel(numberCandidate);
+            operatorLabel = EnsureUiCompatibleLabel(operatorCandidate);
+
+            if (fallbackLabel == null || fallbackLabel == numberLabel || fallbackLabel == operatorLabel)
             {
-                operatorLabel = cachedTmpLabels.FirstOrDefault(text => text != null && (text.name.IndexOf("operator", StringComparison.OrdinalIgnoreCase) >= 0 || text.name.IndexOf("symbol", StringComparison.OrdinalIgnoreCase) >= 0));
+                fallbackLabel = EnsureUiCompatibleLabel(cachedTmpLabels.FirstOrDefault(text => text != null && text != numberLabel && text != operatorLabel));
+            }
+            else
+            {
+                fallbackLabel = EnsureUiCompatibleLabel(fallbackLabel);
             }
 
             if (fallbackLabel == null)
             {
-                fallbackLabel = cachedTmpLabels.FirstOrDefault(text => text != null && text != numberLabel && text != operatorLabel);
-                if (fallbackLabel == null)
-                {
-                    fallbackLabel = cachedTmpLabels.FirstOrDefault();
-                }
+                fallbackLabel = numberLabel ?? operatorLabel;
             }
 
             if (legacyLabel == null)
@@ -239,17 +240,68 @@ namespace MathHighLow.UI
 
             if (backgroundImage == null)
             {
-                backgroundImage = GetComponent<Image>();
-                if (backgroundImage == null)
-                {
-                    backgroundImage = GetComponentInChildren<Image>();
-                }
+                backgroundImage = GetComponent<Image>() ?? GetComponentInChildren<Image>();
             }
 
             if (backgroundImage != null && initialBackgroundSprite == null)
             {
                 initialBackgroundSprite = backgroundImage.sprite;
             }
+
+            cachedTmpLabels = GetComponentsInChildren<TMP_Text>(true);
+        }
+
+        private TMP_Text FindLabelByKeyword(string keyword)
+        {
+            if (string.IsNullOrEmpty(keyword))
+            {
+                return null;
+            }
+
+            var label = cachedTmpLabels.FirstOrDefault(text => text is TextMeshProUGUI && text.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (label != null)
+            {
+                return label;
+            }
+
+            return cachedTmpLabels.FirstOrDefault(text => text != null && text.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private TMP_Text EnsureUiCompatibleLabel(TMP_Text label)
+        {
+            if (label == null)
+            {
+                return null;
+            }
+
+            if (label is TextMeshProUGUI)
+            {
+                return label;
+            }
+
+            var go = label.gameObject;
+            var originalText = label.text;
+            var originalFont = label.font;
+            var originalFontSize = label.fontSize;
+            var originalAlignment = label.alignment;
+
+            label.enabled = false;
+
+            var uiLabel = go.GetComponent<TextMeshProUGUI>();
+            if (uiLabel == null)
+            {
+                uiLabel = go.AddComponent<TextMeshProUGUI>();
+            }
+
+            uiLabel.text = originalText;
+            if (originalFont != null)
+            {
+                uiLabel.font = originalFont;
+            }
+            uiLabel.fontSize = originalFontSize;
+            uiLabel.alignment = originalAlignment;
+
+            return uiLabel;
         }
     }
 }
