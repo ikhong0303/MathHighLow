@@ -54,7 +54,7 @@ namespace MathHighLow.UI
         private GameObject disablePromptPanel;
         private TextMeshProUGUI disablePromptText;
         private readonly List<Button> disablePromptButtons = new();
-        private Font defaultFont;
+        private TMP_FontAsset defaultFont;
         private bool layoutBuilt;
 
         private static readonly Vector2 DefaultCardSize = new(120f, 80f);
@@ -493,7 +493,10 @@ namespace MathHighLow.UI
                 var labelGo = new GameObject("Label", typeof(RectTransform));
                 labelGo.transform.SetParent(go.transform, false);
                 var label = labelGo.AddComponent<TextMeshProUGUI>();
-                label.font = defaultFont;
+                if (defaultFont != null)
+                {
+                    label.font = defaultFont;
+                }
                 label.fontSize = 36;
                 label.alignment = TextAlignmentOptions.Center;
                 label.color = Color.black;
@@ -586,7 +589,10 @@ namespace MathHighLow.UI
             var go = new GameObject("Text", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var text = go.AddComponent<TextMeshProUGUI>();
-            text.font = defaultFont;
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
             text.text = content;
             text.fontSize = fontSize;
             text.fontStyle = style;
@@ -621,7 +627,10 @@ namespace MathHighLow.UI
             var textGo = new GameObject("Label", typeof(RectTransform));
             textGo.transform.SetParent(go.transform, false);
             var text = textGo.AddComponent<TextMeshProUGUI>();
-            text.font = defaultFont;
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
             text.fontSize = fontSize;
             text.fontStyle = FontStyles.Bold;
             text.alignment = TextAlignmentOptions.Center;
@@ -716,10 +725,25 @@ namespace MathHighLow.UI
                 return;
             }
 
-            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont == null)
+            defaultFont = TMP_Settings.defaultFontAsset;
+            if (defaultFont != null)
             {
-                defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                return;
+            }
+
+            var legacyFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (legacyFont == null)
+            {
+                legacyFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+
+            if (legacyFont != null)
+            {
+                defaultFont = TMP_FontAsset.CreateFontAsset(legacyFont);
+                if (defaultFont != null)
+                {
+                    defaultFont.name = $"{legacyFont.name} TMP Font";
+                }
             }
         }
     }
