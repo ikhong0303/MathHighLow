@@ -337,7 +337,7 @@ namespace MathHighLow.Core
                 OperatorType.Divide
             };
 
-            available.RemoveAll(op => handState.DisabledBaseOperators.Contains(op));
+            available.RemoveAll(op => !handState.IsOperatorEnabled(op));
 
             if (available.Count == 0)
             {
@@ -401,7 +401,7 @@ namespace MathHighLow.Core
 
                 multiplyUsed++;
             }
-            else if (handState.DisabledBaseOperators.Contains(operatorType))
+            else if (!handState.IsOperatorEnabled(operatorType))
             {
                 return;
             }
