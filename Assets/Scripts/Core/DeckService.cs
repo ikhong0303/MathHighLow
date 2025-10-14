@@ -9,98 +9,83 @@ namespace MathHighLow.Core
     /// </summary>
     public class DeckService
     {
-        private readonly int minNumber;
-        private readonly int maxNumber;
-        private readonly int numberCopies;
-        private readonly int operatorCopies;
-        private readonly List<CardDefinition> cards = new();
+        private readonly int numberCopiesPerValue;
+        private readonly int multiplyCardsPerRound;
+        private readonly int sqrtCardsPerRound;
+        private readonly List<CardDefinition> slotDeck = new();
         private readonly Random random;
 
-        public DeckService(int minNumber = 1, int maxNumber = 8, int numberCopies = 2, int operatorCopies = 2, int? seed = null)
+        public DeckService(int numberCopiesPerValue = 4, int multiplyCardsPerRound = 2, int sqrtCardsPerRound = 2, int? seed = null)
         {
-            if (minNumber > maxNumber)
-            {
-                throw new ArgumentException("최소 숫자는 최대 숫자보다 클 수 없습니다.");
-            }
-
-            this.minNumber = minNumber;
-            this.maxNumber = maxNumber;
-            this.numberCopies = Math.Max(1, numberCopies);
-            this.operatorCopies = Math.Max(1, operatorCopies);
+            this.numberCopiesPerValue = Math.Max(1, numberCopiesPerValue);
+            this.multiplyCardsPerRound = Math.Max(0, multiplyCardsPerRound);
+            this.sqrtCardsPerRound = Math.Max(0, sqrtCardsPerRound);
             random = seed.HasValue ? new Random(seed.Value) : new Random();
 
-            BuildDeck();
+            BuildSlotDeck();
         }
-
-        public int Count => cards.Count;
 
         /// <summary>
-        /// 덱을 초기 상태로 재구성합니다.
+        /// 라운드 시작 시 슬롯 덱을 새로 구성합니다.
         /// </summary>
-        public void BuildDeck()
+        public void BuildSlotDeck()
         {
-            cards.Clear();
+            slotDeck.Clear();
 
-            for (var i = minNumber; i <= maxNumber; i++)
+            for (var number = 0; number <= 10; number++)
             {
-                for (var copy = 0; copy < numberCopies; copy++)
+                for (var copy = 0; copy < numberCopiesPerValue; copy++)
                 {
-                    cards.Add(new CardDefinition(CardKind.Number, i, OperatorType.Add));
+                    slotDeck.Add(new CardDefinition(CardKind.Number, number, OperatorType.Add));
                 }
             }
 
-            foreach (OperatorType operatorType in Enum.GetValues(typeof(OperatorType)))
+            for (var i = 0; i < multiplyCardsPerRound; i++)
             {
-                for (var copy = 0; copy < operatorCopies; copy++)
-                {
-                    cards.Add(new CardDefinition(CardKind.Operator, 0, operatorType));
-                }
+                slotDeck.Add(new CardDefinition(CardKind.Special, SpecialCardType.Multiply));
             }
 
-            Shuffle();
+            for (var i = 0; i < sqrtCardsPerRound; i++)
+            {
+                slotDeck.Add(new CardDefinition(CardKind.Special, SpecialCardType.SquareRoot));
+            }
+
+            Shuffle(slotDeck);
         }
 
-        public void Shuffle()
+        /// <summary>
+        /// 분배 슬롯에서 한 장의 카드를 뽑습니다.
+        /// 슬롯 덱이 소진될 경우 자동으로 재구성합니다.
+        /// </summary>
+        public CardDefinition DrawSlotCard()
+        {
+            if (slotDeck.Count == 0)
+            {
+                BuildSlotDeck();
+            }
+
+            var lastIndex = slotDeck.Count - 1;
+            var card = slotDeck[lastIndex];
+            slotDeck.RemoveAt(lastIndex);
+            return card.Clone();
+        }
+
+        /// <summary>
+        /// 숫자 카드만을 무한 샘플링하여 반환합니다. (0~10 범위)
+        /// </summary>
+        public CardDefinition DrawNumberCard()
+        {
+            var value = random.Next(0, 11);
+            return new CardDefinition(CardKind.Number, value, OperatorType.Add);
+        }
+
+        private void Shuffle(List<CardDefinition> cards)
         {
             for (var i = cards.Count - 1; i > 0; i--)
             {
                 var swapIndex = random.Next(i + 1);
                 (cards[i], cards[swapIndex]) = (cards[swapIndex], cards[i]);
             }
-        }
-
-        public CardDefinition Draw()
-        {
-            if (cards.Count == 0)
-            {
-                BuildDeck();
-            }
-
-            var lastIndex = cards.Count - 1;
-            var card = cards[lastIndex];
-            cards.RemoveAt(lastIndex);
-            return card;
-        }
-
-        public List<CardDefinition> Draw(int count)
-        {
-            if (count <= 0)
-            {
-                return new List<CardDefinition>();
-            }
-
-            var results = new List<CardDefinition>(count);
-            for (var i = 0; i < count; i++)
-            {
-                results.Add(Draw());
-            }
-
-            return results;
-        }
-
-        public IEnumerable<CardDefinition> PeekAll()
-        {
-            return cards.Select(card => card.Clone());
         }
     }
 }
