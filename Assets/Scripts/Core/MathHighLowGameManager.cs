@@ -532,14 +532,6 @@ namespace MathHighLow.Core
             return string.Join(" ", parts);
         }
 
-        private double EvaluatePlayerExpression(out string expression, out string error)
-        {
-            var validation = ExpressionValidator.Validate(handSnapshot, playerTokens);
-            expression = validation.ExpressionText;
-            error = validation.Error;
-            return validation.IsValid ? validation.Result : double.PositiveInfinity;
-        }
-
         private sealed class PlayerCardState
         {
             public PlayerCardState(CardDefinition card, CardButtonView view)
