@@ -119,12 +119,14 @@ namespace MathHighLow.Core
 
         public IReadOnlyList<OperatorType> GetEnabledBaseOperators()
         {
+            var disabled = DisabledBaseOperators;
+
             return new List<OperatorType>
             {
                 OperatorType.Add,
                 OperatorType.Subtract,
                 OperatorType.Divide
-            }.Where(op => !DisabledBaseOperators.Contains(op)).ToList();
+            }.Where(op => !disabled.Contains(op)).ToList();
         }
     }
 }
