@@ -1,50 +1,67 @@
 using System;
 using System.Collections.Generic;
 using MathHighLow.Core;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace MathHighLow.UI
 {
     /// <summary>
-    /// 프로토타입용 UI를 생성하고 상호작용 이벤트를 제공하는 컨트롤러.
+    /// 코덱스 지시서에 맞춘 동적 UI 구성 및 이벤트 전달을 담당합니다.
     /// </summary>
     public class GameUIController : MonoBehaviour
     {
-        public event Action<CardDefinition, CardButtonView> OnPlayerCardClicked;
-        public event Action<int> OnTargetSelected;
+        public event Action<CardDefinition, CardButtonView> OnNumberCardClicked;
+        public event Action<OperatorType> OnOperatorSelected;
+        public event Action OnSqrtSelected;
         public event Action OnSubmitRequested;
         public event Action OnResetRequested;
+        public event Action<int> OnTargetSelected;
+        public event Action OnBetIncreaseRequested;
+        public event Action OnBetDecreaseRequested;
 
-        [Header("카드 프리팹 (선택 사항)")]
+        [Header("프리팹 (선택 사항)")]
         [SerializeField] private CardButtonView numberCardPrefab;
-        [SerializeField] private CardButtonView operatorCardPrefab;
-        [SerializeField] private string numberCardResourcePath = "UI/NumberCardButton";
-        [SerializeField] private string operatorCardResourcePath = "UI/OperatorCardButton";
 
         private RectTransform root;
-        private Transform aiHandContainer;
-        private Transform playerHandContainer;
-        private Transform playerExpressionContainer;
-        private Transform targetButtonContainer;
-        private Transform actionButtonContainer;
-        private Text statusText;
-        private Text playerExpressionText;
-        private Text aiExpressionText;
-        private readonly List<CardButtonView> playerCardViews = new();
-        private readonly List<GameObject> aiCardObjects = new();
-        private readonly List<Button> targetButtons = new();
-        private readonly Dictionary<Button, int> targetLookup = new();
+        private Transform aiCardContainer;
+        private Transform playerCardContainer;
+        private TextMeshProUGUI statusText;
+        private TextMeshProUGUI playerExpressionText;
+        private TextMeshProUGUI aiExpressionText;
+        private TextMeshProUGUI betValueText;
+        private TextMeshProUGUI playerCreditsText;
+        private TextMeshProUGUI aiCreditsText;
+        private TextMeshProUGUI timerText;
+        private TextMeshProUGUI submitTooltipText;
+        private TextMeshProUGUI multiplyBadgeText;
+        private TextMeshProUGUI sqrtBadgeText;
+        private TextMeshProUGUI resultSummaryText;
+        private TextMeshProUGUI resultDetailText;
         private Button submitButton;
         private Button resetButton;
+        private Button betIncreaseButton;
+        private Button betDecreaseButton;
+        private Button sqrtButton;
+        private Button multiplyButton;
+        private readonly Dictionary<OperatorType, Button> operatorButtons = new();
+        private readonly Dictionary<Button, int> targetLookup = new();
+        private readonly List<Button> targetButtons = new();
+        private Transform targetButtonContainer;
+        private readonly List<CardButtonView> playerCardViews = new();
+        private readonly List<GameObject> aiCardViews = new();
+        private GameObject disablePromptPanel;
+        private TextMeshProUGUI disablePromptText;
+        private readonly List<Button> disablePromptButtons = new();
         private Font defaultFont;
         private bool layoutBuilt;
-        private static readonly Vector2 DefaultCardSize = new Vector2(120f, 80f);
+
+        private static readonly Vector2 DefaultCardSize = new(120f, 80f);
 
         private void Awake()
         {
-            LoadPrefabIfNeeded(ref numberCardPrefab, numberCardResourcePath);
-            LoadPrefabIfNeeded(ref operatorCardPrefab, operatorCardResourcePath);
+            EnsureDefaultFont();
         }
 
         public void BuildLayout()
@@ -55,11 +72,9 @@ namespace MathHighLow.UI
             }
 
             layoutBuilt = true;
-
             EnsureCanvasComponents();
-            EnsureDefaultFont();
 
-            var rootGo = new GameObject("UILayout", typeof(RectTransform));
+            var rootGo = new GameObject("UIRoot", typeof(RectTransform));
             rootGo.transform.SetParent(transform, false);
             root = rootGo.GetComponent<RectTransform>();
             root.anchorMin = Vector2.zero;
@@ -68,48 +83,71 @@ namespace MathHighLow.UI
             root.offsetMax = new Vector2(-40f, -40f);
 
             var background = rootGo.AddComponent<Image>();
-            background.color = new Color(0f, 0f, 0f, 0.05f);
+            background.color = new Color(0.95f, 0.95f, 0.97f, 1f);
 
-            var layoutGroup = rootGo.AddComponent<VerticalLayoutGroup>();
-            layoutGroup.spacing = 16f;
-            layoutGroup.childControlHeight = true;
-            layoutGroup.childControlWidth = true;
-            layoutGroup.childForceExpandHeight = false;
-            layoutGroup.childForceExpandWidth = false;
+            var verticalLayout = rootGo.AddComponent<VerticalLayoutGroup>();
+            verticalLayout.spacing = 16f;
+            verticalLayout.childControlWidth = true;
+            verticalLayout.childControlHeight = false;
+            verticalLayout.childForceExpandHeight = false;
+            verticalLayout.childForceExpandWidth = false;
 
-            CreateHeader(layoutGroup.transform);
-            aiHandContainer = CreateCardSection(layoutGroup.transform, "AI 카드");
-            CreateExpressionSection(layoutGroup.transform);
-            playerHandContainer = CreateCardSection(layoutGroup.transform, "플레이어 카드");
-            targetButtonContainer = CreateButtonRow(layoutGroup.transform, "목표 선택");
-            actionButtonContainer = CreateButtonRow(layoutGroup.transform, "조작");
-            CreateActionButtons();
+            BuildHeader(verticalLayout.transform);
+            BuildTargetSection(verticalLayout.transform);
+            BuildBadgeSection(verticalLayout.transform);
+            BuildCardSections(verticalLayout.transform);
+            BuildExpressionSection(verticalLayout.transform);
+            BuildOperatorSection(verticalLayout.transform);
+            BuildActionSection(verticalLayout.transform);
+            BuildResultSection(verticalLayout.transform);
         }
 
         public void PrepareForRound()
         {
-            ResetPlayerCards();
-            ResetAiCards();
-            UpdatePlayerExpression(string.Empty);
-            UpdateAiExpression(string.Empty);
+            ClearContainerChildren(aiCardContainer);
+            ClearContainerChildren(playerCardContainer);
+            playerCardViews.Clear();
+            aiCardViews.Clear();
+            UpdatePlayerExpression("수식을 구성 중...");
+            UpdateAiExpression("AI 수식: -");
+            SetStatusMessage("카드를 기다리는 중...");
+            ShowRoundResult(string.Empty, string.Empty);
+            SetSubmitInteractable(false, string.Empty);
+            HideDisableOperatorPrompt();
+            SetOperatorEnabled(OperatorType.Add, true);
+            SetOperatorEnabled(OperatorType.Subtract, true);
+            SetOperatorEnabled(OperatorType.Divide, true);
         }
 
         public void SetTargetOptions(IEnumerable<int> targets)
         {
-            ClearTargetButtons();
+            foreach (var button in targetButtons)
+            {
+                if (button != null)
+                {
+                    Destroy(button.gameObject);
+                }
+            }
+
+            targetButtons.Clear();
+            targetLookup.Clear();
 
             if (targets == null)
             {
                 return;
             }
 
+            if (targetButtonContainer == null)
+            {
+                return;
+            }
+
             foreach (var target in targets)
             {
-                var button = CreateTextButton(targetButtonContainer, $"={target}", 30);
+                var button = CreateTextButton(targetButtonContainer, $"={target}", 28);
+                button.onClick.AddListener(() => HandleTargetButtonClicked(button, target));
                 targetButtons.Add(button);
                 targetLookup[button] = target;
-                var capturedTarget = target;
-                button.onClick.AddListener(() => HandleTargetButtonClicked(button, capturedTarget));
             }
         }
 
@@ -117,320 +155,374 @@ namespace MathHighLow.UI
         {
             foreach (var button in targetButtons)
             {
-                var image = button.GetComponent<Image>();
-                if (targetLookup.TryGetValue(button, out var value) && image != null)
+                if (button == null)
                 {
-                    image.color = value == target ? new Color(0.8f, 0.9f, 1f) : Color.white;
+                    continue;
                 }
+
+                var image = button.GetComponent<Image>();
+                if (!targetLookup.TryGetValue(button, out var value) || image == null)
+                {
+                    continue;
+                }
+
+                image.color = value == target ? new Color(0.8f, 0.9f, 1f) : Color.white;
             }
+        }
+
+        public CardButtonView AddPlayerNumberCard(CardDefinition card)
+        {
+            var view = CreateCardView(playerCardContainer, card, true);
+            playerCardViews.Add(view);
+            return view;
         }
 
         public void AddAiCard(CardDefinition card)
         {
-            var view = CreateCardButton(aiHandContainer, card, false);
-            view.Interactable = false;
-            aiCardObjects.Add(view.gameObject);
+            var view = CreateCardView(aiCardContainer, card, false);
+            if (view != null)
+            {
+                view.Interactable = false;
+                aiCardViews.Add(view.gameObject);
+            }
         }
 
-        public void AddPlayerCard(CardDefinition card)
+        public void UpdatePlayerExpression(string text)
         {
-            var view = CreateCardButton(playerHandContainer, card, true);
-            playerCardViews.Add(view);
+            if (playerExpressionText != null)
+            {
+                playerExpressionText.text = string.IsNullOrEmpty(text) ? "플레이어 수식: -" : $"플레이어 수식: {text}";
+            }
         }
 
-        public void ResetPlayerCards()
+        public void UpdateAiExpression(string text)
         {
-            ClearContainerChildren(playerHandContainer);
-            ClearContainerChildren(playerExpressionContainer);
-            playerCardViews.Clear();
-        }
-
-        private void ResetAiCards()
-        {
-            ClearContainerChildren(aiHandContainer);
-            aiCardObjects.Clear();
-        }
-
-        public void UpdatePlayerExpression(string expression)
-        {
-            playerExpressionText.text = string.IsNullOrEmpty(expression)
-                ? "플레이어 수식: -"
-                : $"플레이어 수식: {expression}";
-        }
-
-        public void UpdateAiExpression(string expression)
-        {
-            aiExpressionText.text = string.IsNullOrEmpty(expression)
-                ? "AI 수식: -"
-                : $"AI 수식: {expression}";
+            if (aiExpressionText != null)
+            {
+                aiExpressionText.text = string.IsNullOrEmpty(text) ? "AI 수식: -" : $"AI 수식: {text}";
+            }
         }
 
         public void SetStatusMessage(string message)
         {
-            statusText.text = message;
-        }
-
-        private void CreateHeader(Transform parent)
-        {
-            var title = CreateText(parent, "Math High-Low Prototype", 44, FontStyle.Bold, TextAnchor.MiddleCenter);
-            var instructions = CreateText(parent,
-                "카드를 순서대로 선택하여 수식을 완성하고, 목표값에 더 가깝게 만들면 승리합니다.",
-                24,
-                FontStyle.Normal,
-                TextAnchor.MiddleCenter);
-            statusText = CreateText(parent, "게임을 불러오는 중...", 26, FontStyle.Normal, TextAnchor.MiddleCenter);
-
-            title.color = new Color(0.1f, 0.1f, 0.1f);
-            instructions.color = new Color(0.1f, 0.1f, 0.1f);
-            statusText.color = new Color(0.05f, 0.05f, 0.05f);
-        }
-
-        private Transform CreateCardSection(Transform parent, string header)
-        {
-            var section = new GameObject($"{header} Section", typeof(RectTransform));
-            section.transform.SetParent(parent, false);
-
-            var layout = section.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandHeight = false;
-            layout.childForceExpandWidth = false;
-
-            CreateText(section.transform, header, 30, FontStyle.Bold, TextAnchor.MiddleLeft);
-
-            var row = new GameObject("Cards", typeof(RectTransform));
-            row.transform.SetParent(section.transform, false);
-
-            var horizontal = row.AddComponent<HorizontalLayoutGroup>();
-            horizontal.spacing = 10f;
-            horizontal.childControlWidth = false;
-            horizontal.childForceExpandWidth = false;
-            horizontal.childControlHeight = false;
-            horizontal.childForceExpandHeight = false;
-
-            var layoutElement = row.AddComponent<LayoutElement>();
-            layoutElement.preferredHeight = 100f;
-
-            return row.transform;
-        }
-
-        private void CreateExpressionSection(Transform parent)
-        {
-            var section = new GameObject("Expression Section", typeof(RectTransform));
-            section.transform.SetParent(parent, false);
-
-            var layout = section.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-
-            playerExpressionText = CreateText(section.transform, "플레이어 수식: -", 28, FontStyle.Normal, TextAnchor.MiddleLeft);
-
-            var cardsRow = new GameObject("Expression Cards", typeof(RectTransform));
-            cardsRow.transform.SetParent(section.transform, false);
-
-            var horizontal = cardsRow.AddComponent<HorizontalLayoutGroup>();
-            horizontal.spacing = 16f;
-            horizontal.childAlignment = TextAnchor.MiddleCenter;
-            horizontal.childControlWidth = false;
-            horizontal.childForceExpandWidth = false;
-            horizontal.childControlHeight = false;
-            horizontal.childForceExpandHeight = false;
-
-            var layoutElement = cardsRow.AddComponent<LayoutElement>();
-            layoutElement.preferredHeight = 120f;
-            layoutElement.flexibleWidth = 1f;
-
-            playerExpressionContainer = cardsRow.transform;
-
-            aiExpressionText = CreateText(section.transform, "AI 수식: -", 28, FontStyle.Normal, TextAnchor.MiddleLeft);
-        }
-
-        private Transform CreateButtonRow(Transform parent, string header)
-        {
-            var section = new GameObject($"{header} Row", typeof(RectTransform));
-            section.transform.SetParent(parent, false);
-
-            var layout = section.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 6f;
-            layout.childControlWidth = true;
-            layout.childForceExpandWidth = false;
-            layout.childControlHeight = true;
-            layout.childForceExpandHeight = false;
-
-            CreateText(section.transform, header, 30, FontStyle.Bold, TextAnchor.MiddleLeft);
-
-            var row = new GameObject("Buttons", typeof(RectTransform));
-            row.transform.SetParent(section.transform, false);
-
-            var horizontal = row.AddComponent<HorizontalLayoutGroup>();
-            horizontal.spacing = 12f;
-            horizontal.childControlWidth = false;
-            horizontal.childForceExpandWidth = false;
-            horizontal.childControlHeight = false;
-            horizontal.childForceExpandHeight = false;
-
-            var layoutElement = row.AddComponent<LayoutElement>();
-            layoutElement.preferredHeight = 90f;
-
-            return row.transform;
-        }
-
-        private void CreateActionButtons()
-        {
-            submitButton = CreateTextButton(actionButtonContainer, "수식 제출", 32);
-            submitButton.onClick.AddListener(() => OnSubmitRequested?.Invoke());
-
-            resetButton = CreateTextButton(actionButtonContainer, "선택 초기화", 32);
-            resetButton.onClick.AddListener(() => OnResetRequested?.Invoke());
-        }
-
-        private Text CreateText(Transform parent, string content, int fontSize, FontStyle style, TextAnchor anchor)
-        {
-            var go = new GameObject("Text", typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-
-            var text = go.AddComponent<Text>();
-            text.font = defaultFont;
-            text.text = content;
-            text.fontSize = fontSize;
-            text.fontStyle = style;
-            text.alignment = anchor;
-            text.color = Color.black;
-
-            var layoutElement = go.AddComponent<LayoutElement>();
-            layoutElement.preferredHeight = Mathf.Max(40f, fontSize * 1.2f);
-            layoutElement.flexibleHeight = 0;
-            layoutElement.flexibleWidth = 1f;
-
-            return text;
-        }
-
-        private Button CreateTextButton(Transform parent, string label, int fontSize)
-        {
-            var buttonGo = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonGo.transform.SetParent(parent, false);
-
-            var rect = buttonGo.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(180f, 72f);
-
-            var image = buttonGo.GetComponent<Image>();
-            image.color = Color.white;
-
-            var button = buttonGo.GetComponent<Button>();
-            var colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.9f, 0.95f, 1f);
-            colors.pressedColor = new Color(0.8f, 0.85f, 1f);
-            colors.selectedColor = new Color(0.9f, 0.95f, 1f);
-            button.colors = colors;
-
-            var textGo = new GameObject("Label", typeof(RectTransform));
-            textGo.transform.SetParent(buttonGo.transform, false);
-            var text = textGo.AddComponent<Text>();
-            text.font = defaultFont;
-            text.text = label;
-            text.fontSize = fontSize;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.black;
-
-            var layoutElement = buttonGo.AddComponent<LayoutElement>();
-            layoutElement.preferredWidth = rect.sizeDelta.x;
-            layoutElement.preferredHeight = rect.sizeDelta.y;
-
-            return button;
-        }
-
-        private CardButtonView CreateCardButton(Transform parent, CardDefinition card, bool interactable)
-        {
-            var template = card.Kind == CardKind.Number ? numberCardPrefab : operatorCardPrefab;
-            CardButtonView view;
-
-            if (template != null)
+            if (statusText != null)
             {
-                view = Instantiate(template, parent);
-                view.gameObject.name = $"{card.GetDisplayText()} Card";
-                view.transform.localScale = Vector3.one;
-                EnsureLayoutElement(view);
+                statusText.text = message;
             }
-            else
+        }
+
+        public void UpdateBetDisplay(int amount)
+        {
+            if (betValueText != null)
             {
-                view = CreateRuntimeCardButton(parent);
+                betValueText.text = $"${amount}";
+            }
+        }
+
+        public void UpdateCredits(int player, int ai)
+        {
+            if (playerCreditsText != null)
+            {
+                playerCreditsText.text = $"플레이어 잔액: ${player}";
             }
 
-            ConfigureCardView(view, card, interactable);
-
-            return view;
+            if (aiCreditsText != null)
+            {
+                aiCreditsText.text = $"AI 잔액: ${ai}";
+            }
         }
 
-        public void MovePlayerCardToExpression(CardButtonView view)
+        public void UpdateTimer(float elapsed, float duration, float unlockThreshold)
         {
-            if (view == null || playerExpressionContainer == null)
+            if (timerText == null)
             {
                 return;
             }
 
-            view.transform.SetParent(playerExpressionContainer, true);
-            view.transform.SetAsLastSibling();
+            var remaining = Mathf.Max(0f, duration - elapsed);
+            var minutes = Mathf.FloorToInt(remaining / 60f);
+            var seconds = Mathf.FloorToInt(remaining % 60f);
+            timerText.text = $"타이머 {minutes:00}:{seconds:00}";
 
-            if (view.transform is RectTransform rect)
+            var unlockRemaining = Mathf.Max(0f, unlockThreshold - elapsed);
+            if (unlockRemaining > 0f)
             {
-                rect.localScale = Vector3.one;
-                rect.anchoredPosition3D = Vector3.zero;
+                submitTooltipText.text = $"제출 가능까지 {unlockRemaining:0}초";
+            }
+
+            if (remaining <= 30f)
+            {
+                var pulse = Mathf.PingPong(Time.unscaledTime * 4f, 1f);
+                timerText.color = Color.Lerp(new Color(0.8f, 0.1f, 0.1f), new Color(1f, 0.6f, 0.6f), pulse);
+            }
+            else
+            {
+                timerText.color = Color.black;
             }
         }
 
-        private CardButtonView CreateRuntimeCardButton(Transform parent)
+        public void SetSubmitInteractable(bool interactable, string reason)
         {
-            var buttonGo = new GameObject("CardButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonGo.transform.SetParent(parent, false);
+            if (submitButton != null)
+            {
+                submitButton.interactable = interactable;
+            }
 
-            var rect = buttonGo.GetComponent<RectTransform>();
-            rect.sizeDelta = DefaultCardSize;
-
-            var image = buttonGo.GetComponent<Image>();
-            image.color = Color.white;
-
-            var button = buttonGo.GetComponent<Button>();
-            var colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.9f, 0.95f, 1f);
-            colors.pressedColor = new Color(0.8f, 0.85f, 1f);
-            colors.selectedColor = new Color(0.85f, 0.9f, 1f);
-            button.colors = colors;
-
-            var textGo = new GameObject("Label", typeof(RectTransform));
-            textGo.transform.SetParent(buttonGo.transform, false);
-            var text = textGo.AddComponent<Text>();
-            text.font = defaultFont;
-            text.fontSize = 34;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.black;
-
-            var layoutElement = buttonGo.AddComponent<LayoutElement>();
-            layoutElement.preferredWidth = rect.sizeDelta.x;
-            layoutElement.preferredHeight = rect.sizeDelta.y;
-
-            var view = buttonGo.AddComponent<CardButtonView>();
-            view.Interactable = true;
-            return view;
+            if (submitTooltipText != null)
+            {
+                submitTooltipText.text = interactable ? "제출 가능" : reason;
+            }
         }
 
-        private void ConfigureCardView(CardButtonView view, CardDefinition card, bool interactable)
+        public void UpdateSpecialBadges(int remainingMultiply, int remainingSqrt)
         {
-            view.Initialize(card, interactable ? OnPlayerCardViewClicked : null);
-            view.Interactable = interactable;
-
-            var button = view.GetComponent<Button>();
-            if (button != null)
+            if (multiplyBadgeText != null)
             {
-                button.interactable = interactable;
+                multiplyBadgeText.text = $"× 남음: {remainingMultiply}";
+            }
+
+            if (sqrtBadgeText != null)
+            {
+                sqrtBadgeText.text = $"√ 남음: {remainingSqrt}";
+            }
+
+            if (multiplyButton != null)
+            {
+                multiplyButton.interactable = remainingMultiply > 0;
+            }
+
+            if (sqrtButton != null)
+            {
+                sqrtButton.interactable = remainingSqrt > 0;
+            }
+        }
+
+        public void SetOperatorEnabled(OperatorType operatorType, bool enabled)
+        {
+            if (operatorButtons.TryGetValue(operatorType, out var button) && button != null)
+            {
+                button.interactable = enabled;
+                var image = button.GetComponent<Image>();
+                if (image != null)
+                {
+                    image.color = enabled ? Color.white : new Color(0.8f, 0.8f, 0.8f);
+                }
+            }
+        }
+
+        public void ShowDisableOperatorPrompt(IEnumerable<OperatorType> options, Action<OperatorType> onSelected)
+        {
+            if (disablePromptPanel == null)
+            {
+                return;
+            }
+
+            disablePromptPanel.SetActive(true);
+            disablePromptButtons.ForEach(button => Destroy(button.gameObject));
+            disablePromptButtons.Clear();
+
+            disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
+
+            foreach (var option in options)
+            {
+                var button = CreateTextButton(disablePromptPanel.transform, option.ToSymbol(), 28);
+                var captured = option;
+                button.onClick.AddListener(() => onSelected?.Invoke(captured));
+                disablePromptButtons.Add(button);
+            }
+        }
+
+        public void HideDisableOperatorPrompt()
+        {
+            if (disablePromptPanel == null)
+            {
+                return;
+            }
+
+            disablePromptPanel.SetActive(false);
+            disablePromptButtons.ForEach(button => Destroy(button.gameObject));
+            disablePromptButtons.Clear();
+        }
+
+        public void ShowRoundResult(string summary, string detail)
+        {
+            if (resultSummaryText != null)
+            {
+                resultSummaryText.text = summary;
+            }
+
+            if (resultDetailText != null)
+            {
+                resultDetailText.text = detail;
+            }
+        }
+
+        private void BuildHeader(Transform parent)
+        {
+            var container = CreateVerticalSection(parent, "Header Section");
+            var title = CreateText(container, "Math High-Low", 46, FontStyles.Bold, TextAlignmentOptions.Center);
+            title.color = new Color(0.1f, 0.1f, 0.18f);
+            var info = CreateText(container, "모든 숫자/특수 카드를 사용하여 목표값(=1 또는 =20)에 가장 근접하세요.", 26, FontStyles.Normal, TextAlignmentOptions.Center);
+            info.color = new Color(0.2f, 0.2f, 0.25f);
+            statusText = CreateText(container, "게임을 준비하는 중...", 26, FontStyles.Italic, TextAlignmentOptions.Center);
+        }
+
+        private void BuildTargetSection(Transform parent)
+        {
+            var container = CreateVerticalSection(parent, "Target Section");
+            CreateText(container, "목표 선택", 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            targetButtonContainer = CreateHorizontalRow(container, "Target Buttons");
+            targetButtons.Clear();
+            targetLookup.Clear();
+        }
+
+        private void BuildBadgeSection(Transform parent)
+        {
+            var container = CreateHorizontalRow(parent, "Badge Row");
+            multiplyBadgeText = CreateText(container, "× 남음: 0", 26, FontStyles.Normal, TextAlignmentOptions.Left);
+            sqrtBadgeText = CreateText(container, "√ 남음: 0", 26, FontStyles.Normal, TextAlignmentOptions.Left);
+            playerCreditsText = CreateText(container, "플레이어 잔액: $0", 26, FontStyles.Normal, TextAlignmentOptions.Right);
+            aiCreditsText = CreateText(container, "AI 잔액: $0", 26, FontStyles.Normal, TextAlignmentOptions.Right);
+        }
+
+        private void BuildCardSections(Transform parent)
+        {
+            var aiSection = CreateVerticalSection(parent, "AI Cards");
+            CreateText(aiSection, "AI 공개 패", 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            aiCardContainer = CreateHorizontalRow(aiSection, "AI Card Row");
+
+            var playerSection = CreateVerticalSection(parent, "Player Cards");
+            CreateText(playerSection, "플레이어 패", 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            playerCardContainer = CreateHorizontalRow(playerSection, "Player Card Row");
+        }
+
+        private void BuildExpressionSection(Transform parent)
+        {
+            var container = CreateVerticalSection(parent, "Expression Section");
+            playerExpressionText = CreateText(container, "플레이어 수식: -", 28, FontStyles.Normal, TextAlignmentOptions.Left);
+            aiExpressionText = CreateText(container, "AI 수식: -", 28, FontStyles.Normal, TextAlignmentOptions.Left);
+        }
+
+        private void BuildOperatorSection(Transform parent)
+        {
+            var container = CreateVerticalSection(parent, "Operator Section");
+            CreateText(container, "기호 선택", 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            var row = CreateHorizontalRow(container, "Operators");
+
+            AddOperatorButton(row, OperatorType.Add, "+");
+            AddOperatorButton(row, OperatorType.Subtract, "-");
+            AddOperatorButton(row, OperatorType.Divide, "÷");
+
+            multiplyButton = CreateTextButton(row, "×", 32);
+            multiplyButton.onClick.AddListener(() => OnOperatorSelected?.Invoke(OperatorType.Multiply));
+
+            sqrtButton = CreateTextButton(row, "√", 32);
+            sqrtButton.onClick.AddListener(() => OnSqrtSelected?.Invoke());
+
+            disablePromptPanel = CreatePanel(parent, "Disable Prompt");
+            disablePromptPanel.SetActive(false);
+            disablePromptText = CreateText(disablePromptPanel.transform, string.Empty, 24, FontStyles.Bold, TextAlignmentOptions.Center);
+        }
+
+        private void BuildActionSection(Transform parent)
+        {
+            var container = CreateVerticalSection(parent, "Action Section");
+            CreateText(container, "라운드 제어", 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            var row = CreateHorizontalRow(container, "Action Row");
+
+            betDecreaseButton = CreateTextButton(row, "Bet -", 30);
+            betDecreaseButton.onClick.AddListener(() => OnBetDecreaseRequested?.Invoke());
+
+            betValueText = CreateText(row, "$0", 30, FontStyles.Bold, TextAlignmentOptions.Center);
+
+            betIncreaseButton = CreateTextButton(row, "Bet +", 30);
+            betIncreaseButton.onClick.AddListener(() => OnBetIncreaseRequested?.Invoke());
+
+            timerText = CreateText(row, "타이머 03:00", 30, FontStyles.Bold, TextAlignmentOptions.Center);
+
+            submitButton = CreateTextButton(row, "제출", 32);
+            submitButton.onClick.AddListener(() => OnSubmitRequested?.Invoke());
+
+            resetButton = CreateTextButton(row, "초기화", 28);
+            resetButton.onClick.AddListener(() => OnResetRequested?.Invoke());
+
+            submitTooltipText = CreateText(container, "제출 조건을 충족하세요.", 24, FontStyles.Italic, TextAlignmentOptions.Center);
+        }
+
+        private void BuildResultSection(Transform parent)
+        {
+            var container = CreateVerticalSection(parent, "Result Section");
+            CreateText(container, "결과", 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            resultSummaryText = CreateText(container, string.Empty, 30, FontStyles.Bold, TextAlignmentOptions.Left);
+            resultDetailText = CreateText(container, string.Empty, 26, FontStyles.Normal, TextAlignmentOptions.Left);
+        }
+
+        private void AddOperatorButton(Transform parent, OperatorType operatorType, string label)
+        {
+            var button = CreateTextButton(parent, label, 32);
+            button.onClick.AddListener(() => OnOperatorSelected?.Invoke(operatorType));
+            operatorButtons[operatorType] = button;
+        }
+
+        private CardButtonView CreateCardView(Transform parent, CardDefinition card, bool interactable)
+        {
+            CardButtonView view;
+
+            if (numberCardPrefab != null)
+            {
+                view = Instantiate(numberCardPrefab, parent);
+            }
+            else
+            {
+                var go = new GameObject("CardButton", typeof(RectTransform), typeof(Image), typeof(Button));
+                go.transform.SetParent(parent, false);
+
+                var rect = go.GetComponent<RectTransform>();
+                rect.sizeDelta = DefaultCardSize;
+
+                var image = go.GetComponent<Image>();
+                image.color = Color.white;
+
+                var button = go.GetComponent<Button>();
+                var colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(0.9f, 0.95f, 1f);
+                colors.pressedColor = new Color(0.8f, 0.85f, 1f);
+                button.colors = colors;
+
+                var labelGo = new GameObject("Label", typeof(RectTransform));
+                labelGo.transform.SetParent(go.transform, false);
+                var label = labelGo.AddComponent<TextMeshProUGUI>();
+                label.font = defaultFont;
+                label.fontSize = 36;
+                label.alignment = TextAlignmentOptions.Center;
+                label.color = Color.black;
+
+                var layout = go.AddComponent<LayoutElement>();
+                layout.preferredWidth = rect.sizeDelta.x;
+                layout.preferredHeight = rect.sizeDelta.y;
+
+                view = go.AddComponent<CardButtonView>();
+            }
+
+            var callback = interactable
+                ? new Action<CardButtonView>(handle => OnNumberCardClicked?.Invoke(handle.Card, handle))
+                : null;
+
+            view.Initialize(card, callback);
+            view.Interactable = interactable;
+            if (!interactable)
+            {
+                var button = view.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.interactable = false;
+                }
             }
 
             EnsureLayoutElement(view);
+
+            return view;
         }
 
         private void EnsureLayoutElement(CardButtonView view)
@@ -446,50 +538,15 @@ namespace MathHighLow.UI
                 layout = view.gameObject.AddComponent<LayoutElement>();
             }
 
-            if (layout.preferredWidth <= 0f || layout.preferredHeight <= 0f)
+            if (layout.preferredWidth <= 0f)
             {
-                if (view.transform is RectTransform rect)
-                {
-                    if (layout.preferredWidth <= 0f)
-                    {
-                        layout.preferredWidth = rect.sizeDelta.x;
-                    }
-
-                    if (layout.preferredHeight <= 0f)
-                    {
-                        layout.preferredHeight = rect.sizeDelta.y;
-                    }
-                }
-
-                if (layout.preferredWidth <= 0f)
-                {
-                    layout.preferredWidth = DefaultCardSize.x;
-                }
-
-                if (layout.preferredHeight <= 0f)
-                {
-                    layout.preferredHeight = DefaultCardSize.y;
-                }
-            }
-        }
-
-        private void LoadPrefabIfNeeded(ref CardButtonView prefabField, string resourcePath)
-        {
-            if (prefabField != null || string.IsNullOrEmpty(resourcePath))
-            {
-                return;
+                layout.preferredWidth = DefaultCardSize.x;
             }
 
-            var loaded = Resources.Load<GameObject>(resourcePath);
-            if (loaded != null)
+            if (layout.preferredHeight <= 0f)
             {
-                prefabField = loaded.GetComponent<CardButtonView>();
+                layout.preferredHeight = DefaultCardSize.y;
             }
-        }
-
-        private void OnPlayerCardViewClicked(CardButtonView view)
-        {
-            OnPlayerCardClicked?.Invoke(view.Card, view);
         }
 
         private void HandleTargetButtonClicked(Button button, int target)
@@ -498,18 +555,112 @@ namespace MathHighLow.UI
             OnTargetSelected?.Invoke(target);
         }
 
-        private void ClearTargetButtons()
+        private Transform CreateVerticalSection(Transform parent, string name)
         {
-            foreach (var button in targetButtons)
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var layout = go.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandHeight = false;
+            layout.childForceExpandWidth = false;
+            return go.transform;
+        }
+
+        private Transform CreateHorizontalRow(Transform parent, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var layout = go.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = 12f;
+            layout.childControlWidth = false;
+            layout.childControlHeight = false;
+            layout.childForceExpandHeight = false;
+            layout.childForceExpandWidth = false;
+            return go.transform;
+        }
+
+        private TextMeshProUGUI CreateText(Transform parent, string content, int fontSize, FontStyles style, TextAlignmentOptions alignment)
+        {
+            var go = new GameObject("Text", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var text = go.AddComponent<TextMeshProUGUI>();
+            text.font = defaultFont;
+            text.text = content;
+            text.fontSize = fontSize;
+            text.fontStyle = style;
+            text.alignment = alignment;
+            text.color = Color.black;
+
+            var layout = go.AddComponent<LayoutElement>();
+            layout.flexibleWidth = 1f;
+            layout.preferredHeight = Mathf.Max(40f, fontSize * 1.2f);
+
+            return text;
+        }
+
+        private Button CreateTextButton(Transform parent, string label, int fontSize)
+        {
+            var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+
+            var rect = go.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(160f, 72f);
+
+            var image = go.GetComponent<Image>();
+            image.color = Color.white;
+
+            var button = go.GetComponent<Button>();
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(0.9f, 0.95f, 1f);
+            colors.pressedColor = new Color(0.85f, 0.9f, 1f);
+            button.colors = colors;
+
+            var textGo = new GameObject("Label", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            var text = textGo.AddComponent<TextMeshProUGUI>();
+            text.font = defaultFont;
+            text.fontSize = fontSize;
+            text.fontStyle = FontStyles.Bold;
+            text.alignment = TextAlignmentOptions.Center;
+            text.color = Color.black;
+            text.text = label;
+            if (text.rectTransform != null)
             {
-                if (button != null)
-                {
-                    Destroy(button.gameObject);
-                }
+                text.rectTransform.anchorMin = Vector2.zero;
+                text.rectTransform.anchorMax = Vector2.one;
+                text.rectTransform.offsetMin = Vector2.zero;
+                text.rectTransform.offsetMax = Vector2.zero;
             }
 
-            targetButtons.Clear();
-            targetLookup.Clear();
+            var layout = go.AddComponent<LayoutElement>();
+            layout.preferredWidth = rect.sizeDelta.x;
+            layout.preferredHeight = rect.sizeDelta.y;
+
+            return button;
+        }
+
+        private GameObject CreatePanel(Transform parent, string name)
+        {
+            var panelGo = new GameObject(name, typeof(RectTransform), typeof(Image));
+            panelGo.transform.SetParent(parent, false);
+            var rect = panelGo.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(600f, 140f);
+
+            var image = panelGo.GetComponent<Image>();
+            image.color = new Color(0.95f, 0.9f, 0.7f, 0.95f);
+
+            var layout = panelGo.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            layout.padding = new RectOffset(16, 16, 16, 16);
+
+            return panelGo;
         }
 
         private void ClearContainerChildren(Transform container)
@@ -537,20 +688,20 @@ namespace MathHighLow.UI
                 canvas = gameObject.AddComponent<Canvas>();
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             }
-            else if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            else
             {
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             }
 
-            var canvasScaler = GetComponent<CanvasScaler>();
-            if (canvasScaler == null)
+            var scaler = GetComponent<CanvasScaler>();
+            if (scaler == null)
             {
-                canvasScaler = gameObject.AddComponent<CanvasScaler>();
+                scaler = gameObject.AddComponent<CanvasScaler>();
             }
 
-            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasScaler.referenceResolution = new Vector2(1920f, 1080f);
-            canvasScaler.matchWidthOrHeight = 0.5f;
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
 
             if (GetComponent<GraphicRaycaster>() == null)
             {
@@ -566,24 +717,9 @@ namespace MathHighLow.UI
             }
 
             defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
             if (defaultFont == null)
             {
                 defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            }
-
-            if (defaultFont == null)
-            {
-                var osFonts = Font.GetOSInstalledFontNames();
-                if (osFonts != null && osFonts.Length > 0)
-                {
-                    defaultFont = Font.CreateDynamicFontFromOSFont(osFonts[0], 32);
-                }
-            }
-
-            if (defaultFont == null)
-            {
-                Debug.LogError("UI에 사용할 기본 폰트를 찾을 수 없습니다. Canvas에 폰트를 직접 지정해주세요.", this);
             }
         }
     }
