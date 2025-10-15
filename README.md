@@ -45,3 +45,64 @@
 4. **AI 및 추가 시스템**
    - 특수 카드 사용을 포함한 완전 탐색 기반 AI를 구현하고, 베팅/자산 시스템과 연동합니다.
    - 연출(애니메이션·사운드), 난이도 옵션 등을 확장합니다.
+
+---
+
+## UI 리팩터링 Read Me
+
+다음 내용은 현재 코드 기반 UI 생성 방식을 **Canvas/Prefab + Inspector 연결 방식**으로 전환하기 위한 정리입니다. 강의용 프로젝트에서 디자이너가 Unity 편집기만으로 UI를 다룰 수 있도록 하는 것이 목표입니다.
+
+### 1. 현재 구조 요약
+
+- `GameUIController`가 `BuildLayout()` 이하 일련의 `Build*`, `Create*` 메서드를 통해 런타임에 모든 UI GameObject를 생성합니다.
+- 숫자/연산자 카드 버튼은 `CardButtonView` 프리팹을 인스턴스화하지만, 나머지 버튼과 텍스트는 코드로만 존재해 편집이 어렵습니다.
+- `MathHighLowGameManager`는 `EnsureUi()` 실행 시점에 UI를 지연 초기화하며, 이때 `BuildLayout()`이 호출됩니다.
+
+### 2. 목표 상태
+
+- Canvas, 섹션 컨테이너, 텍스트, 버튼 등을 **씬 또는 프리팹에서 미리 구성**하고 `GameUIController`에는 **참조만 연결**합니다.
+- 카드 버튼 프리팹(`CardButtonView`)은 계속 사용하되, Inspector 슬롯으로 지정해 디자이너가 다른 프리팹으로 교체할 수 있게 합니다.
+- 연산자/타겟/베팅/제출 버튼 등의 이벤트 연결은 `GameUIController`의 `Awake/Start/EnsureUi` 단계에서만 수행하고, Inspector에 노출된 필드가 null인지 확인하는 방식을 채택합니다.
+
+### 3. 구현해야 할 코드 작업
+
+1. **SerializeField 전환**
+   - `GameUIController`의 UI 참조 필드(컨테이너, 텍스트, 버튼 등)에 `[SerializeField]`를 적용해 Inspector에서 할당할 수 있게 합니다.
+   - 연산자 버튼은 구조체/Dictionary 등을 활용해 Inspector에 노출하거나, 각 버튼을 개별 필드(`addButton`, `subtractButton` 등)로 선언한 뒤 런타임에 Dictionary에 등록합니다.
+
+2. **동적 생성 코드 제거**
+   - `BuildLayout()`과 모든 `Build*`, `Create*`, `CreatePanel()` 등 GameObject를 만드는 함수를 삭제하거나 비활성화합니다.
+   - `EnsureCanvasComponents()`는 최소한의 검증만 남기고, Canvas 세팅은 씬에서 처리한다고 명시합니다.
+
+3. **이벤트 연결 정리**
+   - `EnsureUi()` 또는 새로운 초기화 메서드에서 Inspector로 받은 버튼들의 `onClick`을 정리(`RemoveAllListeners`) 후, 기존 델리게이트(`OnSubmitRequested` 등)를 연결합니다.
+   - 타겟 버튼, 연산자 버튼도 동일한 방식으로 연결하며, 필요 시 `List<Button>` 혹은 `SerializedField` 배열을 사용해 간편하게 순회합니다.
+
+4. **유틸리티 수정**
+   - `SetTargetOptions`는 이제 버튼을 생성하지 않고, Inspector로 받은 버튼 리스트를 순회하며 라벨/상태만 업데이트합니다.
+   - `ShowDisableOperatorPrompt` 등 팝업 관련 함수도 프리팹 또는 씬 객체를 참조하도록 변경합니다.
+
+### 4. Unity 에디터에서 준비할 항목 (사용자 담당)
+
+1. **씬 구조 만들기**
+   - Canvas 하위에 다음과 같은 섹션을 빈 GameObject + Layout Group 조합으로 미리 구성합니다.
+     - Header, Target Buttons, Badge Row, AI 카드 영역, 플레이어 카드 영역, 수식 표시, 연산자 영역, 베팅/타이머/제출 영역, 결과 영역, 비활성화 선택 패널 등.
+   - 각 섹션에 TextMeshProUGUI, Button, Image 등을 배치하고 필요한 스타일을 적용합니다.
+
+2. **프리팹 연결**
+   - 숫자/연산자 카드 버튼 프리팹을 준비하고, `GameUIController`의 `numberCardPrefab` 슬롯에 드래그해 연결합니다.
+   - 타겟 버튼(=1, =20)과 연산자 버튼(+, -, ÷, ×, √), 베팅/제출/초기화 버튼 등을 모두 씬에 배치한 뒤 `GameUIController` Inspector 슬롯에 연결합니다.
+
+3. **보조 텍스트/패널 연결**
+   - 상태 메시지, 플레이어/AI 수식, 잔액, 배지, 타이머, 제출 툴팁, 결과 요약/상세 텍스트 필드를 모두 Inspector에 연결합니다.
+   - × 카드 사용 시 노출되는 비활성화 패널과 그 안의 버튼 컨테이너도 참조로 연결합니다.
+
+### 5. 권장 개발 순서
+
+1. **UI 씬 설계 (사용자)**: Canvas와 섹션 구조를 배치하고 필요한 컴포넌트를 모두 준비합니다.
+2. **`GameUIController` 직렬화 작업 (개발자)**: 필드에 `[SerializeField]`를 선언하고, 기존 동적 생성 코드를 제거합니다.
+3. **이벤트 연결 리팩터링 (개발자)**: Inspector에서 받은 버튼을 기반으로 `EnsureUi()` 로직을 재작성합니다.
+4. **기능 테스트**: 플레이 모드에서 카드 배분, 버튼 클릭, 목표 선택, 제출/초기화 등이 정상 동작하는지 확인합니다.
+5. **디자인 조정 (사용자)**: 필요 시 색상·폰트·레이아웃 등을 Inspector에서 자유롭게 수정합니다.
+
+위 순서를 반복 적용하면, 앞으로도 새로운 UI 요구사항이 생길 때 Scene 편집만으로 대응할 수 있습니다.
