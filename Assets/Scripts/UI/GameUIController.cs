@@ -4,6 +4,7 @@ using MathHighLow.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.TextCore.LowLevel;
 
 namespace MathHighLow.UI
 {
