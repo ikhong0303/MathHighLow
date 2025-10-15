@@ -4,7 +4,6 @@ using MathHighLow.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.TextCore.LowLevel;
 
 namespace MathHighLow.UI
 {
@@ -23,39 +22,98 @@ namespace MathHighLow.UI
         public event Action OnBetDecreaseRequested;
 
         [Header("프리팹 (선택 사항)")]
+        [Tooltip("플레이어와 AI 카드 뷰를 생성할 CardButtonView 프리팹을 드래그해 지정하세요.")]
         [SerializeField] private CardButtonView numberCardPrefab;
+        [Tooltip("× 카드로 연산자 비활성화 선택지를 만들 때 복제할 버튼 프리팹을 연결하세요.")]
+        [SerializeField] private Button disablePromptButtonPrefab;
 
-        private RectTransform root;
-        private Transform aiCardContainer;
-        private Transform playerCardContainer;
-        private TextMeshProUGUI statusText;
-        private TextMeshProUGUI playerExpressionText;
-        private TextMeshProUGUI aiExpressionText;
-        private TextMeshProUGUI betValueText;
-        private TextMeshProUGUI playerCreditsText;
-        private TextMeshProUGUI aiCreditsText;
-        private TextMeshProUGUI timerText;
-        private TextMeshProUGUI submitTooltipText;
-        private TextMeshProUGUI multiplyBadgeText;
-        private TextMeshProUGUI sqrtBadgeText;
-        private TextMeshProUGUI resultSummaryText;
-        private TextMeshProUGUI resultDetailText;
-        private Button submitButton;
-        private Button resetButton;
-        private Button betIncreaseButton;
-        private Button betDecreaseButton;
-        private Button sqrtButton;
-        private Button multiplyButton;
+        [Header("루트 및 컨테이너")]
+        [Tooltip("AI 숫자 카드를 배치할 레이아웃 컨테이너 Transform을 지정하세요.")]
+        [SerializeField] private Transform aiCardContainer;
+        [Tooltip("플레이어 숫자 카드를 배치할 레이아웃 컨테이너 Transform을 지정하세요.")]
+        [SerializeField] private Transform playerCardContainer;
+
+        [Header("텍스트 필드")]
+        [Tooltip("게임 진행 상황 메시지를 출력할 TextMeshProUGUI 컴포넌트를 지정하세요.")]
+        [SerializeField] private TextMeshProUGUI statusText;
+        [Tooltip("플레이어 수식 문구를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI playerExpressionText;
+        [Tooltip("AI 수식 문구를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI aiExpressionText;
+        [Tooltip("현재 베팅 금액을 보여줄 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI betValueText;
+        [Tooltip("플레이어의 잔액을 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI playerCreditsText;
+        [Tooltip("AI의 잔액을 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI aiCreditsText;
+        [Tooltip("라운드 제한 시간을 안내할 타이머 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI timerText;
+        [Tooltip("제출 버튼 비활성 사유나 안내 문구를 보여줄 TextMeshProUGUI를 지정하세요.")]
+        [SerializeField] private TextMeshProUGUI submitTooltipText;
+        [Tooltip("× 카드 잔여 횟수 배지를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI multiplyBadgeText;
+        [Tooltip("√ 카드 잔여 횟수 배지를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI sqrtBadgeText;
+        [Tooltip("라운드 결과 요약 문구를 출력할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI resultSummaryText;
+        [Tooltip("라운드 상세 결과를 출력할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI resultDetailText;
+        [Tooltip("연산자 비활성화 패널의 안내 문구를 표시할 TextMeshProUGUI를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI disablePromptText;
+
+        [Header("일반 버튼")]
+        [Tooltip("플레이어 수식 제출에 사용할 Button 컴포넌트를 연결하세요.")]
+        [SerializeField] private Button submitButton;
+        [Tooltip("라운드를 초기화할 Reset 버튼 컴포넌트를 연결하세요.")]
+        [SerializeField] private Button resetButton;
+        [Tooltip("베팅 금액을 증가시킬 버튼 컴포넌트를 연결하세요.")]
+        [SerializeField] private Button betIncreaseButton;
+        [Tooltip("베팅 금액을 감소시킬 버튼 컴포넌트를 연결하세요.")]
+        [SerializeField] private Button betDecreaseButton;
+        [Tooltip("√ 특수 카드를 사용할 버튼 컴포넌트를 연결하세요.")]
+        [SerializeField] private Button sqrtButton;
+        [Tooltip("× 특수 카드를 사용할 버튼 컴포넌트를 연결하세요.")]
+        [SerializeField] private Button multiplyButton;
+
+        [Header("타겟 버튼")]
+        [Tooltip("씬에 배치한 목표값 버튼과 라벨을 순서대로 등록하세요. 라벨을 비우면 버튼 자식에서 자동 탐색됩니다.")]
+        [SerializeField] private List<TargetButtonBinding> targetButtonBindings = new();
+
+        [Header("연산자 버튼")]
+        [Tooltip("+, -, ÷ 버튼 오브젝트를 등록하고 Operator Type 드롭다운을 기호와 동일하게 선택하세요.")]
+        [SerializeField] private List<OperatorButtonBinding> operatorButtonBindings = new();
+
+        [Header("비활성화 패널")]
+        [Tooltip("× 카드 선택 패널 오브젝트를 지정해 활성/비활성 제어에 사용하세요.")]
+        [SerializeField] private GameObject disablePromptPanel;
+        [Tooltip("연산자 선택 버튼들이 배치될 컨테이너 Transform을 연결하세요.")]
+        [SerializeField] private Transform disablePromptButtonContainer;
+
         private readonly Dictionary<OperatorType, Button> operatorButtons = new();
         private readonly Dictionary<Button, int> targetLookup = new();
         private readonly List<Button> targetButtons = new();
-        private Transform targetButtonContainer;
         private readonly List<CardButtonView> playerCardViews = new();
         private readonly List<GameObject> aiCardViews = new();
-        private GameObject disablePromptPanel;
-        private TextMeshProUGUI disablePromptText;
         private readonly List<Button> disablePromptButtons = new();
         private bool layoutBuilt;
+
+        [Serializable]
+        private class TargetButtonBinding
+        {
+            [Tooltip("플레이어가 목표값을 고르는 버튼 오브젝트를 지정하세요.")]
+            public Button button;
+            [Tooltip("버튼 옆에 목표값을 표시할 TextMeshProUGUI를 연결하세요.")]
+            public TextMeshProUGUI label;
+        }
+
+        [Serializable]
+        private class OperatorButtonBinding
+        {
+            [Tooltip("이 버튼이 대표할 연산자 기호를 선택하세요.")]
+            public OperatorType operatorType;
+            [Tooltip("연산자를 선택하는 실제 Button 오브젝트를 지정하세요.")]
+            public Button button;
+        }
 
         private static readonly Vector2 DefaultCardSize = new(120f, 80f);
 
@@ -72,34 +130,12 @@ namespace MathHighLow.UI
             }
 
             layoutBuilt = true;
+
             EnsureCanvasComponents();
-
-            var rootGo = new GameObject("UIRoot", typeof(RectTransform));
-            rootGo.transform.SetParent(transform, false);
-            root = rootGo.GetComponent<RectTransform>();
-            root.anchorMin = Vector2.zero;
-            root.anchorMax = Vector2.one;
-            root.offsetMin = new Vector2(40f, 40f);
-            root.offsetMax = new Vector2(-40f, -40f);
-
-            var background = rootGo.AddComponent<Image>();
-            background.color = new Color(0.95f, 0.95f, 0.97f, 1f);
-
-            var verticalLayout = rootGo.AddComponent<VerticalLayoutGroup>();
-            verticalLayout.spacing = 16f;
-            verticalLayout.childControlWidth = true;
-            verticalLayout.childControlHeight = false;
-            verticalLayout.childForceExpandHeight = false;
-            verticalLayout.childForceExpandWidth = false;
-
-            BuildHeader(verticalLayout.transform);
-            BuildTargetSection(verticalLayout.transform);
-            BuildBadgeSection(verticalLayout.transform);
-            BuildCardSections(verticalLayout.transform);
-            BuildExpressionSection(verticalLayout.transform);
-            BuildOperatorSection(verticalLayout.transform);
-            BuildActionSection(verticalLayout.transform);
-            BuildResultSection(verticalLayout.transform);
+            ConfigurePrimaryButtons();
+            ConfigureOperatorButtons();
+            ConfigureTargetBindings();
+            HideDisableOperatorPrompt();
         }
 
         public void PrepareForRound()
@@ -121,33 +157,53 @@ namespace MathHighLow.UI
 
         public void SetTargetOptions(IEnumerable<int> targets)
         {
-            foreach (var button in targetButtons)
-            {
-                if (button != null)
-                {
-                    Destroy(button.gameObject);
-                }
-            }
-
-            targetButtons.Clear();
             targetLookup.Clear();
 
             if (targets == null)
             {
+                foreach (var binding in targetButtonBindings)
+                {
+                    if (binding?.button == null)
+                    {
+                        continue;
+                    }
+
+                    binding.button.gameObject.SetActive(false);
+                }
+
                 return;
             }
 
-            if (targetButtonContainer == null)
-            {
-                return;
-            }
+            var targetList = targets is List<int> list ? list : new List<int>(targets);
 
-            foreach (var target in targets)
+            for (var i = 0; i < targetButtonBindings.Count; i++)
             {
-                var button = CreateTextButton(targetButtonContainer, $"={target}", 28);
-                button.onClick.AddListener(() => HandleTargetButtonClicked(button, target));
-                targetButtons.Add(button);
-                targetLookup[button] = target;
+                var binding = targetButtonBindings[i];
+                if (binding?.button == null)
+                {
+                    continue;
+                }
+
+                if (i < targetList.Count)
+                {
+                    var target = targetList[i];
+                    targetLookup[binding.button] = target;
+                    binding.button.gameObject.SetActive(true);
+
+                    if (binding.label == null)
+                    {
+                        binding.label = binding.button.GetComponentInChildren<TextMeshProUGUI>();
+                    }
+
+                    if (binding.label != null)
+                    {
+                        binding.label.text = $"={target}";
+                    }
+                }
+                else
+                {
+                    binding.button.gameObject.SetActive(false);
+                }
             }
         }
 
@@ -356,18 +412,33 @@ namespace MathHighLow.UI
             }
 
             ShowDisableOperatorPrompt();
-            disablePromptButtons.ForEach(button => Destroy(button.gameObject));
-            disablePromptButtons.Clear();
+            ClearDisablePromptButtons();
 
             if (disablePromptText != null && string.IsNullOrEmpty(disablePromptText.text))
             {
                 disablePromptText.text = "× 카드 효과: 비활성화할 기호를 선택하세요";
             }
 
+            if (disablePromptButtonPrefab == null)
+            {
+                return;
+            }
+
+            var parent = disablePromptButtonContainer != null
+                ? disablePromptButtonContainer
+                : disablePromptPanel.transform;
+
             foreach (var option in options)
             {
-                var button = CreateTextButton(disablePromptPanel.transform, option.ToSymbol(), 28);
+                var button = Instantiate(disablePromptButtonPrefab, parent);
+                var label = button.GetComponentInChildren<TextMeshProUGUI>();
+                if (label != null)
+                {
+                    label.text = option.ToSymbol();
+                }
+
                 var captured = option;
+                button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() => onSelected?.Invoke(captured));
                 disablePromptButtons.Add(button);
             }
@@ -381,8 +452,7 @@ namespace MathHighLow.UI
             }
 
             disablePromptPanel.SetActive(false);
-            disablePromptButtons.ForEach(button => Destroy(button.gameObject));
-            disablePromptButtons.Clear();
+            ClearDisablePromptButtons();
             if (disablePromptText != null)
             {
                 disablePromptText.text = string.Empty;
@@ -402,111 +472,77 @@ namespace MathHighLow.UI
             }
         }
 
-        private void BuildHeader(Transform parent)
+        private void ConfigurePrimaryButtons()
         {
-            var container = CreateVerticalSection(parent, "Header Section");
-            var title = CreateText(container, "Math High-Low", 46, FontStyles.Bold, TextAlignmentOptions.Center);
-            title.color = new Color(0.1f, 0.1f, 0.18f);
-            var info = CreateText(container, "모든 숫자/특수 카드를 사용하여 목표값(=1 또는 =20)에 가장 근접하세요.", 26, FontStyles.Normal, TextAlignmentOptions.Center);
-            info.color = new Color(0.2f, 0.2f, 0.25f);
-            statusText = CreateText(container, "게임을 준비하는 중...", 26, FontStyles.Italic, TextAlignmentOptions.Center);
+            ConfigureButton(submitButton, () => OnSubmitRequested?.Invoke());
+            ConfigureButton(resetButton, () => OnResetRequested?.Invoke());
+            ConfigureButton(betIncreaseButton, () => OnBetIncreaseRequested?.Invoke());
+            ConfigureButton(betDecreaseButton, () => OnBetDecreaseRequested?.Invoke());
         }
 
-        private void BuildTargetSection(Transform parent)
+        private void ConfigureOperatorButtons()
         {
-            var container = CreateVerticalSection(parent, "Target Section");
-            CreateText(container, "목표 선택", 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            targetButtonContainer = CreateHorizontalRow(container, "Target Buttons");
+            operatorButtons.Clear();
+
+            foreach (var binding in operatorButtonBindings)
+            {
+                if (binding?.button == null)
+                {
+                    continue;
+                }
+
+                var capturedType = binding.operatorType;
+                operatorButtons[capturedType] = binding.button;
+                binding.button.onClick.RemoveAllListeners();
+                binding.button.onClick.AddListener(() => OnOperatorSelected?.Invoke(capturedType));
+            }
+
+            if (multiplyButton != null)
+            {
+                multiplyButton.onClick.RemoveAllListeners();
+                multiplyButton.onClick.AddListener(() => OnOperatorSelected?.Invoke(OperatorType.Multiply));
+            }
+
+            if (sqrtButton != null)
+            {
+                sqrtButton.onClick.RemoveAllListeners();
+                sqrtButton.onClick.AddListener(() => OnSqrtSelected?.Invoke());
+            }
+        }
+
+        private void ConfigureTargetBindings()
+        {
             targetButtons.Clear();
             targetLookup.Clear();
+
+            foreach (var binding in targetButtonBindings)
+            {
+                if (binding?.button == null)
+                {
+                    continue;
+                }
+
+                if (binding.label == null)
+                {
+                    binding.label = binding.button.GetComponentInChildren<TextMeshProUGUI>();
+                }
+
+                binding.button.onClick.RemoveAllListeners();
+                binding.button.onClick.AddListener(() => HandleTargetButtonClicked(binding.button));
+                binding.button.gameObject.SetActive(false);
+                targetButtons.Add(binding.button);
+            }
         }
 
-        private void BuildBadgeSection(Transform parent)
+        private void ConfigureButton(Button button, Action onClicked)
         {
-            var container = CreateHorizontalRow(parent, "Badge Row");
-            multiplyBadgeText = CreateText(container, "× 남음: 0", 26, FontStyles.Normal, TextAlignmentOptions.Left);
-            sqrtBadgeText = CreateText(container, "√ 남음: 0", 26, FontStyles.Normal, TextAlignmentOptions.Left);
-            playerCreditsText = CreateText(container, "플레이어 잔액: $0", 26, FontStyles.Normal, TextAlignmentOptions.Right);
-            aiCreditsText = CreateText(container, "AI 잔액: $0", 26, FontStyles.Normal, TextAlignmentOptions.Right);
-        }
+            if (button == null)
+            {
+                return;
+            }
 
-        private void BuildCardSections(Transform parent)
-        {
-            var aiSection = CreateVerticalSection(parent, "AI Cards");
-            CreateText(aiSection, "AI 공개 패", 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            aiCardContainer = CreateHorizontalRow(aiSection, "AI Card Row");
-
-            var playerSection = CreateVerticalSection(parent, "Player Cards");
-            CreateText(playerSection, "플레이어 패", 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            playerCardContainer = CreateHorizontalRow(playerSection, "Player Card Row");
-        }
-
-        private void BuildExpressionSection(Transform parent)
-        {
-            var container = CreateVerticalSection(parent, "Expression Section");
-            playerExpressionText = CreateText(container, "플레이어 수식: -", 28, FontStyles.Normal, TextAlignmentOptions.Left);
-            aiExpressionText = CreateText(container, "AI 수식: -", 28, FontStyles.Normal, TextAlignmentOptions.Left);
-        }
-
-        private void BuildOperatorSection(Transform parent)
-        {
-            var container = CreateVerticalSection(parent, "Operator Section");
-            CreateText(container, "기호 선택", 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            var row = CreateHorizontalRow(container, "Operators");
-
-            AddOperatorButton(row, OperatorType.Add, "+");
-            AddOperatorButton(row, OperatorType.Subtract, "-");
-            AddOperatorButton(row, OperatorType.Divide, "÷");
-
-            multiplyButton = CreateTextButton(row, "×", 32);
-            multiplyButton.onClick.AddListener(() => OnOperatorSelected?.Invoke(OperatorType.Multiply));
-
-            sqrtButton = CreateTextButton(row, "√", 32);
-            sqrtButton.onClick.AddListener(() => OnSqrtSelected?.Invoke());
-
-            disablePromptPanel = CreatePanel(parent, "Disable Prompt");
-            disablePromptPanel.SetActive(false);
-            disablePromptText = CreateText(disablePromptPanel.transform, string.Empty, 24, FontStyles.Bold, TextAlignmentOptions.Center);
-        }
-
-        private void BuildActionSection(Transform parent)
-        {
-            var container = CreateVerticalSection(parent, "Action Section");
-            CreateText(container, "라운드 제어", 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            var row = CreateHorizontalRow(container, "Action Row");
-
-            betDecreaseButton = CreateTextButton(row, "Bet -", 30);
-            betDecreaseButton.onClick.AddListener(() => OnBetDecreaseRequested?.Invoke());
-
-            betValueText = CreateText(row, "$0", 30, FontStyles.Bold, TextAlignmentOptions.Center);
-
-            betIncreaseButton = CreateTextButton(row, "Bet +", 30);
-            betIncreaseButton.onClick.AddListener(() => OnBetIncreaseRequested?.Invoke());
-
-            timerText = CreateText(row, "타이머 03:00", 30, FontStyles.Bold, TextAlignmentOptions.Center);
-
-            submitButton = CreateTextButton(row, "제출", 32);
-            submitButton.onClick.AddListener(() => OnSubmitRequested?.Invoke());
-
-            resetButton = CreateTextButton(row, "초기화", 28);
-            resetButton.onClick.AddListener(() => OnResetRequested?.Invoke());
-
-            submitTooltipText = CreateText(container, "제출 조건을 충족하세요.", 24, FontStyles.Italic, TextAlignmentOptions.Center);
-        }
-
-        private void BuildResultSection(Transform parent)
-        {
-            var container = CreateVerticalSection(parent, "Result Section");
-            CreateText(container, "결과", 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            resultSummaryText = CreateText(container, string.Empty, 30, FontStyles.Bold, TextAlignmentOptions.Left);
-            resultDetailText = CreateText(container, string.Empty, 26, FontStyles.Normal, TextAlignmentOptions.Left);
-        }
-
-        private void AddOperatorButton(Transform parent, OperatorType operatorType, string label)
-        {
-            var button = CreateTextButton(parent, label, 32);
-            button.onClick.AddListener(() => OnOperatorSelected?.Invoke(operatorType));
-            operatorButtons[operatorType] = button;
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => onClicked?.Invoke());
         }
 
         private CardButtonView CreateCardView(Transform parent, CardDefinition card, bool interactable)
@@ -594,117 +630,20 @@ namespace MathHighLow.UI
             }
         }
 
-        private void HandleTargetButtonClicked(Button button, int target)
+        private void HandleTargetButtonClicked(Button button)
         {
-            HighlightTarget(target);
-            OnTargetSelected?.Invoke(target);
-        }
-
-        private Transform CreateVerticalSection(Transform parent, string name)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            var layout = go.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandHeight = false;
-            layout.childForceExpandWidth = false;
-            return go.transform;
-        }
-
-        private Transform CreateHorizontalRow(Transform parent, string name)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            var layout = go.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 12f;
-            layout.childControlWidth = false;
-            layout.childControlHeight = false;
-            layout.childForceExpandHeight = false;
-            layout.childForceExpandWidth = false;
-            return go.transform;
-        }
-
-        private TextMeshProUGUI CreateText(Transform parent, string content, int fontSize, FontStyles style, TextAlignmentOptions alignment)
-        {
-            var go = new GameObject("Text", typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            var text = go.AddComponent<TextMeshProUGUI>();
-            text.text = content;
-            text.fontSize = fontSize;
-            text.fontStyle = style;
-            text.alignment = alignment;
-            text.color = Color.black;
-
-            var layout = go.AddComponent<LayoutElement>();
-            layout.flexibleWidth = 1f;
-            layout.preferredHeight = Mathf.Max(40f, fontSize * 1.2f);
-
-            return text;
-        }
-
-        private Button CreateTextButton(Transform parent, string label, int fontSize)
-        {
-            var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(parent, false);
-
-            var rect = go.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(160f, 72f);
-
-            var image = go.GetComponent<Image>();
-            image.color = Color.white;
-
-            var button = go.GetComponent<Button>();
-            var colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.9f, 0.95f, 1f);
-            colors.pressedColor = new Color(0.85f, 0.9f, 1f);
-            button.colors = colors;
-
-            var textGo = new GameObject("Label", typeof(RectTransform));
-            textGo.transform.SetParent(go.transform, false);
-            var text = textGo.AddComponent<TextMeshProUGUI>();
-
-            text.fontSize = fontSize;
-            text.fontStyle = FontStyles.Bold;
-            text.alignment = TextAlignmentOptions.Center;
-            text.color = Color.black;
-            text.text = label;
-            if (text.rectTransform != null)
+            if (button == null)
             {
-                text.rectTransform.anchorMin = Vector2.zero;
-                text.rectTransform.anchorMax = Vector2.one;
-                text.rectTransform.offsetMin = Vector2.zero;
-                text.rectTransform.offsetMax = Vector2.zero;
+                return;
             }
 
-            var layout = go.AddComponent<LayoutElement>();
-            layout.preferredWidth = rect.sizeDelta.x;
-            layout.preferredHeight = rect.sizeDelta.y;
+            if (!targetLookup.TryGetValue(button, out var target))
+            {
+                return;
+            }
 
-            return button;
-        }
-
-        private GameObject CreatePanel(Transform parent, string name)
-        {
-            var panelGo = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panelGo.transform.SetParent(parent, false);
-            var rect = panelGo.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(600f, 140f);
-
-            var image = panelGo.GetComponent<Image>();
-            image.color = new Color(0.95f, 0.9f, 0.7f, 0.95f);
-
-            var layout = panelGo.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-            layout.padding = new RectOffset(16, 16, 16, 16);
-
-            return panelGo;
+            HighlightTarget(target);
+            OnTargetSelected?.Invoke(target);
         }
 
         private void ClearContainerChildren(Transform container)
@@ -722,6 +661,19 @@ namespace MathHighLow.UI
                     Destroy(child.gameObject);
                 }
             }
+        }
+
+        private void ClearDisablePromptButtons()
+        {
+            foreach (var button in disablePromptButtons)
+            {
+                if (button != null)
+                {
+                    Destroy(button.gameObject);
+                }
+            }
+
+            disablePromptButtons.Clear();
         }
 
         private void EnsureCanvasComponents()
