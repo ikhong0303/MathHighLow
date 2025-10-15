@@ -22,46 +22,71 @@ namespace MathHighLow.UI
         public event Action OnBetDecreaseRequested;
 
         [Header("프리팹 (선택 사항)")]
+        [Tooltip("플레이어와 AI 카드 뷰를 생성할 CardButtonView 프리팹을 드래그해 지정하세요.")]
         [SerializeField] private CardButtonView numberCardPrefab;
+        [Tooltip("× 카드로 연산자 비활성화 선택지를 만들 때 복제할 버튼 프리팹을 연결하세요.")]
         [SerializeField] private Button disablePromptButtonPrefab;
 
         [Header("루트 및 컨테이너")]
+        [Tooltip("AI 숫자 카드를 배치할 레이아웃 컨테이너 Transform을 지정하세요.")]
         [SerializeField] private Transform aiCardContainer;
+        [Tooltip("플레이어 숫자 카드를 배치할 레이아웃 컨테이너 Transform을 지정하세요.")]
         [SerializeField] private Transform playerCardContainer;
 
         [Header("텍스트 필드")]
+        [Tooltip("게임 진행 상황 메시지를 출력할 TextMeshProUGUI 컴포넌트를 지정하세요.")]
         [SerializeField] private TextMeshProUGUI statusText;
+        [Tooltip("플레이어 수식 문구를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI playerExpressionText;
+        [Tooltip("AI 수식 문구를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI aiExpressionText;
+        [Tooltip("현재 베팅 금액을 보여줄 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI betValueText;
+        [Tooltip("플레이어의 잔액을 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI playerCreditsText;
+        [Tooltip("AI의 잔액을 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI aiCreditsText;
+        [Tooltip("라운드 제한 시간을 안내할 타이머 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI timerText;
+        [Tooltip("제출 버튼 비활성 사유나 안내 문구를 보여줄 TextMeshProUGUI를 지정하세요.")]
         [SerializeField] private TextMeshProUGUI submitTooltipText;
+        [Tooltip("× 카드 잔여 횟수 배지를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI multiplyBadgeText;
+        [Tooltip("√ 카드 잔여 횟수 배지를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI sqrtBadgeText;
+        [Tooltip("라운드 결과 요약 문구를 출력할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI resultSummaryText;
+        [Tooltip("라운드 상세 결과를 출력할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI resultDetailText;
+        [Tooltip("연산자 비활성화 패널의 안내 문구를 표시할 TextMeshProUGUI를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI disablePromptText;
 
         [Header("일반 버튼")]
+        [Tooltip("플레이어 수식 제출에 사용할 Button 컴포넌트를 연결하세요.")]
         [SerializeField] private Button submitButton;
+        [Tooltip("라운드를 초기화할 Reset 버튼 컴포넌트를 연결하세요.")]
         [SerializeField] private Button resetButton;
+        [Tooltip("베팅 금액을 증가시킬 버튼 컴포넌트를 연결하세요.")]
         [SerializeField] private Button betIncreaseButton;
+        [Tooltip("베팅 금액을 감소시킬 버튼 컴포넌트를 연결하세요.")]
         [SerializeField] private Button betDecreaseButton;
+        [Tooltip("√ 특수 카드를 사용할 버튼 컴포넌트를 연결하세요.")]
         [SerializeField] private Button sqrtButton;
+        [Tooltip("× 특수 카드를 사용할 버튼 컴포넌트를 연결하세요.")]
         [SerializeField] private Button multiplyButton;
 
         [Header("타겟 버튼")]
-        [Tooltip("씬에 배치한 목표값 버튼과 라벨을 순서대로 등록합니다. 비워두면 라벨은 자동으로 탐색됩니다.")]
+        [Tooltip("씬에 배치한 목표값 버튼과 라벨을 순서대로 등록하세요. 라벨을 비우면 버튼 자식에서 자동 탐색됩니다.")]
         [SerializeField] private List<TargetButtonBinding> targetButtonBindings = new();
 
         [Header("연산자 버튼")]
-        [Tooltip("+, -, ÷ 버튼을 등록하고 Operator Type 드롭다운을 해당 기호로 맞춰주세요.")]
+        [Tooltip("+, -, ÷ 버튼 오브젝트를 등록하고 Operator Type 드롭다운을 기호와 동일하게 선택하세요.")]
         [SerializeField] private List<OperatorButtonBinding> operatorButtonBindings = new();
 
         [Header("비활성화 패널")]
+        [Tooltip("× 카드 선택 패널 오브젝트를 지정해 활성/비활성 제어에 사용하세요.")]
         [SerializeField] private GameObject disablePromptPanel;
+        [Tooltip("연산자 선택 버튼들이 배치될 컨테이너 Transform을 연결하세요.")]
         [SerializeField] private Transform disablePromptButtonContainer;
 
         private readonly Dictionary<OperatorType, Button> operatorButtons = new();
@@ -75,14 +100,18 @@ namespace MathHighLow.UI
         [Serializable]
         private class TargetButtonBinding
         {
+            [Tooltip("플레이어가 목표값을 고르는 버튼 오브젝트를 지정하세요.")]
             public Button button;
+            [Tooltip("버튼 옆에 목표값을 표시할 TextMeshProUGUI를 연결하세요.")]
             public TextMeshProUGUI label;
         }
 
         [Serializable]
         private class OperatorButtonBinding
         {
+            [Tooltip("이 버튼이 대표할 연산자 기호를 선택하세요.")]
             public OperatorType operatorType;
+            [Tooltip("연산자를 선택하는 실제 Button 오브젝트를 지정하세요.")]
             public Button button;
         }
 
