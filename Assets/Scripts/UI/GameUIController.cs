@@ -538,10 +538,7 @@ namespace MathHighLow.UI
                 var labelGo = new GameObject("Label", typeof(RectTransform));
                 labelGo.transform.SetParent(go.transform, false);
                 var label = labelGo.AddComponent<TextMeshProUGUI>();
-                if (defaultFont != null)
-                {
-                    label.font = defaultFont;
-                }
+
                 label.fontSize = 36;
                 label.alignment = TextAlignmentOptions.Center;
                 label.color = Color.black;
@@ -634,10 +631,6 @@ namespace MathHighLow.UI
             var go = new GameObject("Text", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var text = go.AddComponent<TextMeshProUGUI>();
-            if (defaultFont != null)
-            {
-                text.font = defaultFont;
-            }
             text.text = content;
             text.fontSize = fontSize;
             text.fontStyle = style;
@@ -672,10 +665,7 @@ namespace MathHighLow.UI
             var textGo = new GameObject("Label", typeof(RectTransform));
             textGo.transform.SetParent(go.transform, false);
             var text = textGo.AddComponent<TextMeshProUGUI>();
-            if (defaultFont != null)
-            {
-                text.font = defaultFont;
-            }
+
             text.fontSize = fontSize;
             text.fontStyle = FontStyles.Bold;
             text.alignment = TextAlignmentOptions.Center;
