@@ -53,9 +53,11 @@ namespace MathHighLow.UI
         [SerializeField] private Button multiplyButton;
 
         [Header("타겟 버튼")]
+        [Tooltip("씬에 배치한 목표값 버튼과 라벨을 순서대로 등록합니다. 비워두면 라벨은 자동으로 탐색됩니다.")]
         [SerializeField] private List<TargetButtonBinding> targetButtonBindings = new();
 
         [Header("연산자 버튼")]
+        [Tooltip("+, -, ÷ 버튼을 등록하고 Operator Type 드롭다운을 해당 기호로 맞춰주세요.")]
         [SerializeField] private List<OperatorButtonBinding> operatorButtonBindings = new();
 
         [Header("비활성화 패널")]
