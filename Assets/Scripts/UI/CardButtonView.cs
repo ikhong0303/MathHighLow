@@ -280,17 +280,27 @@ namespace MathHighLow.UI
             }
 
             var go = label.gameObject;
+            if (go == null)
+            {
+                return label;
+            }
+
             var originalText = label.text;
             var originalFont = label.font;
             var originalFontSize = label.fontSize;
             var originalAlignment = label.alignment;
 
-            label.enabled = false;
-
             var uiLabel = go.GetComponent<TextMeshProUGUI>();
             if (uiLabel == null)
             {
                 uiLabel = go.AddComponent<TextMeshProUGUI>();
+            }
+
+            if (uiLabel == null)
+            {
+                label.enabled = true;
+                Debug.LogWarning($"[{nameof(CardButtonView)}] TextMeshProUGUI 컴포넌트를 {go.name} 오브젝트에 추가하지 못했습니다. 기존 TMP_Text를 계속 사용합니다.");
+                return label;
             }
 
             uiLabel.text = originalText;
@@ -300,6 +310,8 @@ namespace MathHighLow.UI
             }
             uiLabel.fontSize = originalFontSize;
             uiLabel.alignment = originalAlignment;
+
+            label.enabled = false;
 
             return uiLabel;
         }
