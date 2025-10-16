@@ -276,6 +276,28 @@ namespace MathHighLow.UI
             }
         }
 
+        public void ShowPlayerOutcome(int target, string expression, double? value, double? difference, string error)
+        {
+            if (playerExpressionText != null)
+            {
+                playerExpressionText.text = FormatOutcomeLine("플레이어", target, expression, value, difference, error);
+            }
+
+            if (playerExpressionResultText != null)
+            {
+                var displayError = string.IsNullOrEmpty(expression) ? string.Empty : error;
+                playerExpressionResultText.text = string.IsNullOrEmpty(displayError) ? string.Empty : $"오류: {displayError}";
+            }
+        }
+
+        public void ShowAiOutcome(int target, string expression, double? value, double? difference, string error)
+        {
+            if (aiExpressionText != null)
+            {
+                aiExpressionText.text = FormatOutcomeLine("AI", target, expression, value, difference, error);
+            }
+        }
+
         public void SetStatusMessage(string message)
         {
             if (statusText != null)
@@ -613,7 +635,8 @@ namespace MathHighLow.UI
                 ? new Action<CardButtonView>(handle => OnNumberCardClicked?.Invoke(handle.Card, handle))
                 : null;
 
-            view.Initialize(card, callback);
+            var ownership = interactable ? CardButtonView.Ownership.Player : CardButtonView.Ownership.Ai;
+            view.Initialize(card, callback, ownership);
             view.Interactable = interactable;
             if (!interactable)
             {
@@ -712,6 +735,34 @@ namespace MathHighLow.UI
 
             cache = go.transform;
             return cache;
+        }
+
+        private string FormatOutcomeLine(string owner, int target, string expression, double? value, double? difference, string error)
+        {
+            var targetText = target != 0 ? target.ToString("0") : "-";
+            var expressionText = string.IsNullOrWhiteSpace(expression)
+                ? (string.IsNullOrEmpty(error) ? "-" : error)
+                : expression;
+            var valueText = FormatNumeric(value);
+            var differenceText = FormatNumeric(difference);
+
+            return $"{owner} | 목표 [{targetText}] ㅣ 수식 [{expressionText}] ㅣ 값 [{valueText}] ㅣ 차이 [{differenceText}]";
+        }
+
+        private string FormatNumeric(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return "-";
+            }
+
+            var actual = value.Value;
+            if (double.IsNaN(actual) || double.IsInfinity(actual))
+            {
+                return "-";
+            }
+
+            return actual.ToString("0.##");
         }
 
         private void EnsureLayoutElement(CardButtonView view)

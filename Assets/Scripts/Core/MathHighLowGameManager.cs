@@ -29,6 +29,9 @@ namespace MathHighLow.Core
         [SerializeField] private int maxBet = 5;
         [SerializeField] private int[] targetValues = { 1, 20 };
 
+        [Header("연출")]
+        [SerializeField, Min(0f)] private float resultsDisplayDuration = 10f;
+
         [Header("참조")]
         [SerializeField] private GameUIController uiController;
 
@@ -166,8 +169,6 @@ namespace MathHighLow.Core
             {
                 elapsed += Time.deltaTime;
                 var windowOpen = elapsed >= submissionUnlockTime;
-                var timeRemaining = Mathf.Max(0f, roundDuration - elapsed);
-
                 uiController.UpdateTimer(elapsed, roundDuration, submissionUnlockTime);
 
                 EvaluateSubmissionEligibility(windowOpen);
@@ -191,34 +192,37 @@ namespace MathHighLow.Core
             var aiTokens = aiSolver.FindBestExpression(handSnapshot, selectedTarget);
             var aiValidation = ExpressionValidator.Validate(handSnapshot, aiTokens);
 
-            var aiExpressionText = aiValidation.IsValid
-                ? $"{aiValidation.ExpressionText} = {aiValidation.Result:0.##}"
-                : "유효한 수식을 찾지 못했습니다.";
+            var playerExpressionDisplay = playerExpressionText;
+            var playerError = string.Empty;
+            double? playerValue = null;
+            double? playerDifference = null;
 
-            if (string.IsNullOrEmpty(playerExpressionText))
+            if (string.IsNullOrEmpty(playerExpressionDisplay))
             {
-                var fallback = string.IsNullOrEmpty(validationError)
+                playerError = string.IsNullOrEmpty(validationError)
                     ? "수식이 유효하지 않습니다."
                     : validationError;
-                uiController.UpdatePlayerExpression(fallback);
-                uiController.UpdatePlayerExpressionResult(string.Empty);
+            }
+            else if (!double.IsFinite(playerResult))
+            {
+                playerError = string.IsNullOrEmpty(validationError)
+                    ? "결과 계산 실패"
+                    : validationError;
             }
             else
             {
-                uiController.UpdatePlayerExpression(playerExpressionText);
-                if (double.IsFinite(playerResult))
-                {
-                    uiController.UpdatePlayerExpressionResult($"= {playerResult:0.##}");
-                }
-                else
-                {
-                    var resultFallback = string.IsNullOrEmpty(validationError)
-                        ? "결과 계산 실패"
-                        : validationError;
-                    uiController.UpdatePlayerExpressionResult(resultFallback);
-                }
+                playerValue = playerResult;
+                playerDifference = Math.Abs(playerResult - selectedTarget);
             }
-            uiController.UpdateAiExpression(aiExpressionText);
+
+            uiController.ShowPlayerOutcome(selectedTarget, playerExpressionDisplay, playerValue, playerDifference, playerError);
+
+            var aiExpressionDisplay = aiValidation.IsValid ? aiValidation.ExpressionText : string.Empty;
+            var aiError = aiValidation.IsValid ? string.Empty : "유효한 수식을 찾지 못했습니다.";
+            double? aiValue = aiValidation.IsValid ? aiValidation.Result : null;
+            double? aiDifference = aiValidation.IsValid ? Math.Abs(aiValidation.Result - selectedTarget) : null;
+
+            uiController.ShowAiOutcome(selectedTarget, aiExpressionDisplay, aiValue, aiDifference, aiError);
 
             var playerValid = double.IsFinite(playerResult);
             var aiValid = aiValidation.IsValid;
@@ -233,7 +237,7 @@ namespace MathHighLow.Core
             uiController.UpdateCredits(playerCredits, aiCredits);
 
             phase = RoundPhase.Results;
-            yield return new WaitForSeconds(3f);
+            yield return new WaitForSeconds(Mathf.Max(0f, resultsDisplayDuration));
         }
 
         private void EvaluateSubmissionEligibility(bool windowOpen)

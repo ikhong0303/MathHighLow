@@ -52,11 +52,11 @@ namespace MathHighLow.UI
                 return liberationSans;
             }
 
-            var builtinArial = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            if (builtinArial != null)
+            var builtinLegacyRuntime = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (builtinLegacyRuntime != null)
             {
-                var arialAsset = TMP_FontAsset.CreateFontAsset(
-                    builtinArial,
+                var runtimeAsset = TMP_FontAsset.CreateFontAsset(
+                    builtinLegacyRuntime,
                     90,
                     9,
                     GlyphRenderMode.SDFAA,
@@ -65,10 +65,10 @@ namespace MathHighLow.UI
                     AtlasPopulationMode.Dynamic,
                     true);
 
-                if (arialAsset != null)
+                if (runtimeAsset != null)
                 {
-                    arialAsset.name = $"{builtinArial.name} TMP Dynamic";
-                    return arialAsset;
+                    runtimeAsset.name = $"{builtinLegacyRuntime.name} TMP Dynamic";
+                    return runtimeAsset;
                 }
             }
 
