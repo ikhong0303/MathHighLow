@@ -38,6 +38,8 @@ namespace MathHighLow.UI
         [SerializeField] private TextMeshProUGUI statusText;
         [Tooltip("플레이어 수식 문구를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI playerExpressionText;
+        [Tooltip("플레이어 수식 결과를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
+        [SerializeField] private TextMeshProUGUI playerExpressionResultText;
         [Tooltip("AI 수식 문구를 표시할 TextMeshProUGUI 오브젝트를 연결하세요.")]
         [SerializeField] private TextMeshProUGUI aiExpressionText;
         [Tooltip("현재 베팅 금액을 보여줄 TextMeshProUGUI 오브젝트를 연결하세요.")]
@@ -149,6 +151,7 @@ namespace MathHighLow.UI
             playerCardViews.Clear();
             aiCardViews.Clear();
             UpdatePlayerExpression("수식을 구성 중...");
+            UpdatePlayerExpressionResult(string.Empty);
             UpdateAiExpression("AI 수식: -");
             SetStatusMessage("카드를 기다리는 중...");
             ShowRoundResult(string.Empty, string.Empty);
@@ -252,6 +255,16 @@ namespace MathHighLow.UI
             if (playerExpressionText != null)
             {
                 playerExpressionText.text = string.IsNullOrEmpty(text) ? "플레이어 수식: -" : $"플레이어 수식: {text}";
+            }
+        }
+
+        public void UpdatePlayerExpressionResult(string text)
+        {
+            if (playerExpressionResultText != null)
+            {
+                playerExpressionResultText.text = string.IsNullOrEmpty(text)
+                    ? "플레이어 결과: -"
+                    : $"플레이어 결과: {text}";
             }
         }
 
