@@ -95,6 +95,10 @@ namespace MathHighLow.UI
         private readonly List<CardButtonView> playerCardViews = new();
         private readonly List<GameObject> aiCardViews = new();
         private readonly List<Button> disablePromptButtons = new();
+        private Transform autoPlayerCardContainer;
+        private Transform autoAiCardContainer;
+        private bool warnedPlayerContainer;
+        private bool warnedAiContainer;
         private bool layoutBuilt;
 
         [Serializable]
@@ -547,6 +551,12 @@ namespace MathHighLow.UI
 
         private CardButtonView CreateCardView(Transform parent, CardDefinition card, bool interactable)
         {
+            parent = ResolveCardParent(parent, interactable);
+            if (parent == null)
+            {
+                return null;
+            }
+
             CardButtonView view;
 
             if (numberCardPrefab != null)
@@ -604,6 +614,91 @@ namespace MathHighLow.UI
             EnsureLayoutElement(view);
 
             return view;
+        }
+
+        private Transform ResolveCardParent(Transform parent, bool interactable)
+        {
+            if (parent != null)
+            {
+                return parent;
+            }
+
+            if (interactable)
+            {
+                if (playerCardContainer == null)
+                {
+                    playerCardContainer = EnsureFallbackCardContainer(ref autoPlayerCardContainer, true);
+                    if (!warnedPlayerContainer)
+                    {
+                        Debug.LogWarning(
+                            "플레이어 카드 컨테이너가 설정되지 않아 임시 컨테이너를 생성했습니다. " +
+                            "GameUIController 컴포넌트의 Player Card Container 필드를 확인하세요.",
+                            this);
+                        warnedPlayerContainer = true;
+                    }
+                }
+
+                return playerCardContainer;
+            }
+
+            if (aiCardContainer == null)
+            {
+                aiCardContainer = EnsureFallbackCardContainer(ref autoAiCardContainer, false);
+                if (!warnedAiContainer)
+                {
+                    Debug.LogWarning(
+                        "AI 카드 컨테이너가 설정되지 않아 임시 컨테이너를 생성했습니다. " +
+                        "GameUIController 컴포넌트의 AI Card Container 필드를 확인하세요.",
+                        this);
+                    warnedAiContainer = true;
+                }
+            }
+
+            return aiCardContainer;
+        }
+
+        private Transform EnsureFallbackCardContainer(ref Transform cache, bool isPlayer)
+        {
+            if (cache != null)
+            {
+                return cache;
+            }
+
+            var name = isPlayer ? "PlayerCards(Auto)" : "AiCards(Auto)";
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(transform, false);
+
+            var rect = go.GetComponent<RectTransform>();
+            if (isPlayer)
+            {
+                rect.anchorMin = new Vector2(0.5f, 0f);
+                rect.anchorMax = new Vector2(0.5f, 0f);
+                rect.pivot = new Vector2(0.5f, 0f);
+                rect.anchoredPosition = new Vector2(0f, 60f);
+            }
+            else
+            {
+                rect.anchorMin = new Vector2(0.5f, 1f);
+                rect.anchorMax = new Vector2(0.5f, 1f);
+                rect.pivot = new Vector2(0.5f, 1f);
+                rect.anchoredPosition = new Vector2(0f, -60f);
+            }
+            rect.sizeDelta = new Vector2(0f, 0f);
+
+            var layout = go.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = 12f;
+            layout.childAlignment = isPlayer ? TextAnchor.LowerCenter : TextAnchor.UpperCenter;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            layout.childControlWidth = false;
+            layout.childControlHeight = false;
+
+            var fitter = go.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            cache = go.transform;
+            return cache;
         }
 
         private void EnsureLayoutElement(CardButtonView view)
