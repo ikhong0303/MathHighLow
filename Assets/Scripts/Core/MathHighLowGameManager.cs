@@ -195,9 +195,29 @@ namespace MathHighLow.Core
                 ? $"{aiValidation.ExpressionText} = {aiValidation.Result:0.##}"
                 : "유효한 수식을 찾지 못했습니다.";
 
-            uiController.UpdatePlayerExpression(string.IsNullOrEmpty(playerExpressionText)
-                ? (validationError ?? "수식이 유효하지 않습니다.")
-                : playerExpressionText);
+            if (string.IsNullOrEmpty(playerExpressionText))
+            {
+                var fallback = string.IsNullOrEmpty(validationError)
+                    ? "수식이 유효하지 않습니다."
+                    : validationError;
+                uiController.UpdatePlayerExpression(fallback);
+                uiController.UpdatePlayerExpressionResult(string.Empty);
+            }
+            else
+            {
+                uiController.UpdatePlayerExpression(playerExpressionText);
+                if (double.IsFinite(playerResult))
+                {
+                    uiController.UpdatePlayerExpressionResult($"= {playerResult:0.##}");
+                }
+                else
+                {
+                    var resultFallback = string.IsNullOrEmpty(validationError)
+                        ? "결과 계산 실패"
+                        : validationError;
+                    uiController.UpdatePlayerExpressionResult(resultFallback);
+                }
+            }
             uiController.UpdateAiExpression(aiExpressionText);
 
             var playerValid = double.IsFinite(playerResult);
@@ -260,7 +280,7 @@ namespace MathHighLow.Core
                 return double.PositiveInfinity;
             }
 
-            formattedExpression = $"{validation.ExpressionText} = {validation.Result:0.##}";
+            formattedExpression = validation.ExpressionText;
             return validation.Result;
         }
 

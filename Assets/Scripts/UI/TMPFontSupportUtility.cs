@@ -46,33 +46,69 @@ namespace MathHighLow.UI
 
         private static TMP_FontAsset CreateDefaultFontAsset()
         {
-            var legacyFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (legacyFont == null)
+            var liberationSans = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            if (liberationSans != null)
             {
-                legacyFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                return liberationSans;
             }
 
-            if (legacyFont == null)
+            var builtinArial = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (builtinArial != null)
             {
-                return null;
+                var arialAsset = TMP_FontAsset.CreateFontAsset(
+                    builtinArial,
+                    90,
+                    9,
+                    GlyphRenderMode.SDFAA,
+                    1024,
+                    1024,
+                    AtlasPopulationMode.Dynamic,
+                    true);
+
+                if (arialAsset != null)
+                {
+                    arialAsset.name = $"{builtinArial.name} TMP Dynamic";
+                    return arialAsset;
+                }
             }
 
-            var defaultFont = TMP_FontAsset.CreateFontAsset(
-                legacyFont,
-                90,
-                9,
-                GlyphRenderMode.SDFAA,
-                1024,
-                1024,
-                AtlasPopulationMode.Dynamic,
-                true);
-
-            if (defaultFont != null)
+            foreach (var candidate in OsFontCandidates)
             {
-                defaultFont.name = $"{legacyFont.name} TMP Font";
+                try
+                {
+                    var osFont = Font.CreateDynamicFontFromOSFont(candidate, 90);
+                    if (osFont == null)
+                    {
+                        continue;
+                    }
+
+                    var candidateAsset = TMP_FontAsset.CreateFontAsset(
+                        osFont,
+                        90,
+                        9,
+                        GlyphRenderMode.SDFAA,
+                        1024,
+                        1024,
+                        AtlasPopulationMode.Dynamic,
+                        true);
+
+                    if (candidateAsset == null)
+                    {
+                        continue;
+                    }
+
+                    candidateAsset.name = $"{osFont.name} TMP Dynamic";
+                    return candidateAsset;
+                }
+                catch (Exception)
+                {
+                    // OS 폰트를 찾지 못했거나 접근 권한이 없을 경우 무시합니다.
+                }
             }
 
-            return defaultFont;
+            Debug.LogWarning(
+                "TMP 기본 폰트를 만들 수 없습니다. TMP Settings에서 기본 폰트 자산을 직접 지정해 주세요.");
+            return null;
         }
 
         private static void EnsureHangulFallback(TMP_FontAsset baseFont)
