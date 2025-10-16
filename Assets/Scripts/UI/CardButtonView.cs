@@ -18,12 +18,27 @@ namespace MathHighLow.UI
         [SerializeField] private TMP_Text operatorLabel;
         [SerializeField] private Text legacyLabel;
 
+        public enum Ownership
+        {
+            Player,
+            Ai
+        }
+
         [Header("비주얼 설정")]
         [SerializeField] private Image backgroundImage;
         [SerializeField] private Sprite numberSprite;
         [SerializeField] private Sprite operatorSprite;
         [SerializeField] private Vector2 numberLabelOffset = Vector2.zero;
         [SerializeField] private Vector2 operatorLabelOffset = Vector2.zero;
+        [Header("색상 설정")]
+        [Tooltip("플레이어 숫자 카드 배경색입니다. 알파가 0이면 원래 색을 유지합니다.")]
+        [SerializeField] private Color playerNumberColor = Color.clear;
+        [Tooltip("AI 숫자 카드 배경색입니다. 기본값은 연한 파란색입니다.")]
+        [SerializeField] private Color aiNumberColor = new Color(0.85f, 0.92f, 1f);
+        [Tooltip("플레이어 연산자/특수 카드 배경색입니다. 알파가 0이면 원래 색을 유지합니다.")]
+        [SerializeField] private Color playerOperatorColor = Color.clear;
+        [Tooltip("AI 연산자/특수 카드 배경색입니다. 알파가 0이면 원래 색을 유지합니다.")]
+        [SerializeField] private Color aiOperatorColor = Color.clear;
 
         private Button button;
         private CardDefinition card;
@@ -31,6 +46,8 @@ namespace MathHighLow.UI
         private TMP_Text fallbackLabel;
         private TMP_Text[] cachedTmpLabels = Array.Empty<TMP_Text>();
         private Sprite initialBackgroundSprite;
+        private Color initialBackgroundColor = Color.white;
+        private Ownership ownership = Ownership.Player;
 
         public CardDefinition Card => card;
 
@@ -53,13 +70,15 @@ namespace MathHighLow.UI
             if (backgroundImage != null)
             {
                 initialBackgroundSprite = backgroundImage.sprite;
+                initialBackgroundColor = backgroundImage.color;
             }
         }
 
-        public void Initialize(CardDefinition definition, Action<CardButtonView> clicked)
+        public void Initialize(CardDefinition definition, Action<CardButtonView> clicked, Ownership owner = Ownership.Player)
         {
             card = definition;
             onClicked = clicked;
+            ownership = owner;
             CacheLabelReferences();
             ApplyCardVisual();
             ConfigureButton();
@@ -143,14 +162,25 @@ namespace MathHighLow.UI
                 return;
             }
 
-            if (card.Kind == CardKind.Number)
+            var isNumber = card.Kind == CardKind.Number;
+            backgroundImage.sprite = isNumber
+                ? (numberSprite != null ? numberSprite : initialBackgroundSprite)
+                : (operatorSprite != null ? operatorSprite : initialBackgroundSprite);
+            backgroundImage.color = ResolveBackgroundColor(isNumber);
+        }
+
+        private Color ResolveBackgroundColor(bool isNumber)
+        {
+            var preferred = ownership == Ownership.Player
+                ? (isNumber ? playerNumberColor : playerOperatorColor)
+                : (isNumber ? aiNumberColor : aiOperatorColor);
+
+            if (preferred.a > 0f)
             {
-                backgroundImage.sprite = numberSprite != null ? numberSprite : initialBackgroundSprite;
+                return preferred;
             }
-            else
-            {
-                backgroundImage.sprite = operatorSprite != null ? operatorSprite : initialBackgroundSprite;
-            }
+
+            return initialBackgroundColor;
         }
 
         private TMP_Text ResolvePrimaryLabel()
