@@ -341,7 +341,7 @@ namespace MathHighLow.UI
             var remaining = Mathf.Max(0f, duration - elapsed);
             var minutes = Mathf.FloorToInt(remaining / 60f);
             var seconds = Mathf.FloorToInt(remaining % 60f);
-            timerText.text = $"타이머 {minutes:00}:{seconds:00}";
+            timerText.text = $"{minutes:00}:{seconds:00}";
 
             var unlockRemaining = Mathf.Max(0f, unlockThreshold - elapsed);
             if (unlockRemaining > 0f)
