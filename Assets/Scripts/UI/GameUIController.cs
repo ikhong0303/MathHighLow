@@ -280,13 +280,16 @@ namespace MathHighLow.UI
         {
             if (playerExpressionText != null)
             {
-                playerExpressionText.text = FormatOutcomeLine("플레이어", target, expression, value, difference, error);
+                var hasExpression = !string.IsNullOrWhiteSpace(expression);
+                playerExpressionText.text = hasExpression
+                    ? $"플레이어 수식: {expression}"
+                    : "플레이어 수식: -";
             }
 
             if (playerExpressionResultText != null)
             {
-                var displayError = string.IsNullOrEmpty(expression) ? string.Empty : error;
-                playerExpressionResultText.text = string.IsNullOrEmpty(displayError) ? string.Empty : $"오류: {displayError}";
+                var summary = FormatOutcomeLine(target, expression, value, difference, error);
+                UpdatePlayerExpressionResult(summary);
             }
         }
 
@@ -294,7 +297,8 @@ namespace MathHighLow.UI
         {
             if (aiExpressionText != null)
             {
-                aiExpressionText.text = FormatOutcomeLine("AI", target, expression, value, difference, error);
+                var summary = FormatOutcomeLine(target, expression, value, difference, error);
+                aiExpressionText.text = $"AI 결과: {summary}";
             }
         }
 
@@ -737,16 +741,21 @@ namespace MathHighLow.UI
             return cache;
         }
 
-        private string FormatOutcomeLine(string owner, int target, string expression, double? value, double? difference, string error)
+        private string FormatOutcomeLine(int target, string expression, double? value, double? difference, string error)
         {
             var targetText = target != 0 ? target.ToString("0") : "-";
-            var expressionText = string.IsNullOrWhiteSpace(expression)
-                ? (string.IsNullOrEmpty(error) ? "-" : error)
-                : expression;
+            var expressionText = string.IsNullOrWhiteSpace(expression) ? "-" : expression;
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                expressionText = string.IsNullOrWhiteSpace(expression)
+                    ? error
+                    : $"{expression} (오류: {error})";
+            }
             var valueText = FormatNumeric(value);
             var differenceText = FormatNumeric(difference);
 
-            return $"{owner} | 목표 [{targetText}] ㅣ 수식 [{expressionText}] ㅣ 값 [{valueText}] ㅣ 차이 [{differenceText}]";
+            return $"목표 [{targetText}] ㅣ 수식 [{expressionText}] ㅣ 값 [{valueText}] ㅣ 차이 [{differenceText}]";
         }
 
         private string FormatNumeric(double? value)

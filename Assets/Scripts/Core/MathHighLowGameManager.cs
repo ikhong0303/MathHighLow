@@ -38,7 +38,8 @@ namespace MathHighLow.Core
         private readonly List<PlayerCardState> playerCards = new();
         private readonly List<ExpressionToken> playerTokens = new();
         private readonly DeckService deckService = new();
-        private readonly RoundHandState handState = new();
+        private readonly RoundHandState playerHandState = new();
+        private readonly RoundHandState aiHandState = new();
         private readonly AiSolver aiSolver = new();
 
         private RoundPhase phase;
@@ -51,7 +52,8 @@ namespace MathHighLow.Core
         private int multiplyUsed;
         private int sqrtUsed;
         private bool expectNumber;
-        private RoundHandSnapshot handSnapshot;
+        private RoundHandSnapshot playerHandSnapshot;
+        private RoundHandSnapshot aiHandSnapshot;
 
         private void Awake()
         {
@@ -140,7 +142,8 @@ namespace MathHighLow.Core
             elapsed = 0f;
             playerTokens.Clear();
             playerCards.Clear();
-            handState.Reset();
+            playerHandState.Reset();
+            aiHandState.Reset();
             deckService.BuildSlotDeck();
 
             uiController.PrepareForRound();
@@ -158,8 +161,9 @@ namespace MathHighLow.Core
                 yield return new WaitForSeconds(dealInterval);
             }
 
-            handSnapshot = handState.CreateSnapshot();
-            uiController.UpdateSpecialBadges(handState.MultiplyCount - multiplyUsed, handState.SquareRootCount - sqrtUsed);
+            playerHandSnapshot = playerHandState.CreateSnapshot();
+            aiHandSnapshot = aiHandState.CreateSnapshot();
+            uiController.UpdateSpecialBadges(playerHandState.MultiplyCount - multiplyUsed, playerHandState.SquareRootCount - sqrtUsed);
             uiController.SetStatusMessage("수식을 만들어 제출하세요.");
 
             phase = RoundPhase.Waiting;
@@ -189,8 +193,8 @@ namespace MathHighLow.Core
             phase = RoundPhase.Evaluating;
 
             var playerResult = EvaluatePlayerExpression(out var playerExpressionText, out var validationError);
-            var aiTokens = aiSolver.FindBestExpression(handSnapshot, selectedTarget);
-            var aiValidation = ExpressionValidator.Validate(handSnapshot, aiTokens);
+            var aiTokens = aiSolver.FindBestExpression(aiHandSnapshot, selectedTarget);
+            var aiValidation = ExpressionValidator.Validate(aiHandSnapshot, aiTokens);
 
             var playerExpressionDisplay = playerExpressionText;
             var playerError = string.Empty;
@@ -242,7 +246,7 @@ namespace MathHighLow.Core
 
         private void EvaluateSubmissionEligibility(bool windowOpen)
         {
-            var snapshot = handSnapshot;
+            var snapshot = playerHandSnapshot;
             var validation = ExpressionValidator.Validate(snapshot, playerTokens);
 
             if (!windowOpen)
@@ -277,7 +281,7 @@ namespace MathHighLow.Core
             formattedExpression = string.Empty;
             error = string.Empty;
 
-            var validation = ExpressionValidator.Validate(handSnapshot, playerTokens);
+            var validation = ExpressionValidator.Validate(playerHandSnapshot, playerTokens);
             if (!validation.IsValid)
             {
                 error = validation.Error;
@@ -334,8 +338,9 @@ namespace MathHighLow.Core
 
             if (card.Kind == CardKind.Special)
             {
-                handState.AddSpecialCard(card.SpecialType);
-                uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+                playerHandState.AddSpecialCard(card.SpecialType);
+                aiHandState.AddSpecialCard(card.SpecialType);
+                uiController.UpdateSpecialBadges(Mathf.Max(0, playerHandState.MultiplyCount - multiplyUsed), Mathf.Max(0, playerHandState.SquareRootCount - sqrtUsed));
 
                 switch (card.SpecialType)
                 {
@@ -361,7 +366,7 @@ namespace MathHighLow.Core
                 OperatorType.Divide
             };
 
-            available.RemoveAll(op => !handState.IsOperatorEnabled(op));
+            available.RemoveAll(op => !playerHandState.IsOperatorEnabled(op));
 
             if (available.Count == 0)
             {
@@ -371,7 +376,8 @@ namespace MathHighLow.Core
             var selectionComplete = false;
             uiController.ShowDisableOperatorPrompt(available, selected =>
             {
-                handState.DisableBaseOperator(selected);
+                playerHandState.DisableBaseOperator(selected);
+                aiHandState.DisableBaseOperator(selected);
                 uiController.SetOperatorEnabled(selected, false);
                 selectionComplete = true;
             });
@@ -382,11 +388,14 @@ namespace MathHighLow.Core
 
         private void AddNumberCard(int value)
         {
-            handState.AddNumberCard(value);
-            var card = new CardDefinition(CardKind.Number, value, OperatorType.Add);
-            var view = uiController.AddPlayerNumberCard(card);
-            playerCards.Add(new PlayerCardState(card, view));
-            uiController.AddAiCard(card);
+            playerHandState.AddNumberCard(value);
+            var playerCard = new CardDefinition(CardKind.Number, value, OperatorType.Add);
+            var view = uiController.AddPlayerNumberCard(playerCard);
+            playerCards.Add(new PlayerCardState(playerCard, view));
+
+            var aiCard = deckService.DrawNumberCard();
+            aiHandState.AddNumberCard(aiCard.NumberValue);
+            uiController.AddAiCard(aiCard);
         }
 
         private void HandleNumberCardClicked(CardDefinition card, CardButtonView view)
@@ -418,21 +427,21 @@ namespace MathHighLow.Core
 
             if (operatorType == OperatorType.Multiply)
             {
-                if (multiplyUsed >= handState.MultiplyCount)
+                if (multiplyUsed >= playerHandState.MultiplyCount)
                 {
                     return;
                 }
 
                 multiplyUsed++;
             }
-            else if (!handState.IsOperatorEnabled(operatorType))
+            else if (!playerHandState.IsOperatorEnabled(operatorType))
             {
                 return;
             }
 
             playerTokens.Add(ExpressionToken.BinaryOperatorToken(operatorType));
             expectNumber = true;
-            uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+            uiController.UpdateSpecialBadges(Mathf.Max(0, playerHandState.MultiplyCount - multiplyUsed), Mathf.Max(0, playerHandState.SquareRootCount - sqrtUsed));
             UpdateExpressionPreview();
         }
 
@@ -443,14 +452,14 @@ namespace MathHighLow.Core
                 return;
             }
 
-            if (sqrtUsed >= handState.SquareRootCount)
+            if (sqrtUsed >= playerHandState.SquareRootCount)
             {
                 return;
             }
 
             sqrtUsed++;
             playerTokens.Add(ExpressionToken.UnaryOperatorToken(SpecialCardType.SquareRoot));
-            uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+            uiController.UpdateSpecialBadges(Mathf.Max(0, playerHandState.MultiplyCount - multiplyUsed), Mathf.Max(0, playerHandState.SquareRootCount - sqrtUsed));
             UpdateExpressionPreview();
         }
 
@@ -479,7 +488,7 @@ namespace MathHighLow.Core
             multiplyUsed = 0;
             sqrtUsed = 0;
             expectNumber = true;
-            uiController.UpdateSpecialBadges(Mathf.Max(0, handState.MultiplyCount - multiplyUsed), Mathf.Max(0, handState.SquareRootCount - sqrtUsed));
+            uiController.UpdateSpecialBadges(Mathf.Max(0, playerHandState.MultiplyCount - multiplyUsed), Mathf.Max(0, playerHandState.SquareRootCount - sqrtUsed));
             UpdateExpressionPreview();
         }
 
